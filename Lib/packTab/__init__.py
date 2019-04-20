@@ -14,6 +14,13 @@
 
 from __future__ import print_function, division, absolute_import
 import collections
+from math import ceil
+try:
+	from math import log2
+except ImportError:
+	from math import log
+	from functools import partial
+	log2 = partial(log, base=2)
 
 class defaultMapping(collections.defaultdict):
 	_next = 0
@@ -83,4 +90,28 @@ def pack_table(data, mapping=None, default=0):
 	if type(default) is str:
 		default = mapping[default]
 
+	return solve(data, default)
 
+def binaryBitsFor(n):
+	"""Returns smalles power-of-two number of bits needed to represent n
+	different values.
+
+	>>> binaryBitsFor(2)
+	1
+	>>> binaryBitsFor(7)
+	4
+	>>> binaryBitsFor(100)
+	8
+	"""
+	return 1 << ceil(log2(log2(n)))
+
+def solve(data, default):
+	minV, maxV = min(data), max(data)
+	bandwidth = maxV - minV + 1
+	assert bandwidth > 1
+	bits = binaryBitsFor(bandwidth)
+
+
+if __name__ == "__main__":
+	import sys, doctest
+	sys.exit(doctest.testmod().failed)
