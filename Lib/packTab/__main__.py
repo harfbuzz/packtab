@@ -29,7 +29,8 @@ except NameError:
 def main(args=sys.argv):
 	f = ucd.category
 	data = [f(chr(u)) for u in range(0x110000)]
-	print(pack_table(data, None, 'Cn'))
+	from pprint import pprint
+	pprint(pack_table(data, None, 'Cn'))
 	return 0
 
 if __name__ == "__main__":

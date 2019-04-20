@@ -114,42 +114,89 @@ def binaryBitsFor(n):
 	if n is 1: return 0
 	return 1 << ceil(log2(log2(n)))
 
-class Solution:
-	pass
+class BinarySolution:
+	def __init__(self, nLookups, nExtraOps, cost, mult=0):
+		self.nLookups = nLookups
+		self.nExtraOps = nExtraOps
+		self.cost = cost
+		self.mult = mult
 
-class Layer:
+		self.key = (nLookups, nExtraOps)
 
-	def __init__(self, data, default, nextLayer=None):
+	def __repr__(self):
+		return "BinarySolution(%d,%d,%d,%d)" % \
+			(self.nLookups, self.nExtraOps, self.cost, self.mult)
+
+class BinaryLayer:
+
+	"""
+	A layer that can reproduce @data passed to its constructor, by
+	using multiple lookup tables that split the domain by powers
+	of two.
+	"""
+
+	def __init__(self, data, default):
 		self.data = data
 		self.default = default
-		self.next = nextLayer
-		self.solutions = dict()
+		self.next = None
+		self.solutions = {}
 
 		self.minV, self.maxV = min(data), max(data)
 		self.bandwidth = self.maxV - self.minV + 1
 		self.unitBits = binaryBitsFor(self.bandwidth)
+		self.extraOps = 1 if self.unitBits < 8 else 0
 		self.bytes = ceil(self.unitBits * len(self.data) / 8)
 
-def solve(data, default, lastLayer=None):
+		if len(data) is 1 or self.bandwidth is 1:
+			return
 
-	layer = Layer(data, default, lastLayer)
+		self.split()
 
-	while lastLayer is not None:
-		lastLayer = lastLayer.next
+	def split(self):
+		if len(self.data) & 1:
+			self.data.append(self.default) # TODO Don't modify?
 
-	if len(data) is 1:
-		return layer
+		mapping = self.mapping = AutoMapping()
+		default2 = mapping[(self.default, self.default)]
+		data2 = []
+		it = iter(self.data)
+		for first in it: data2.append(mapping[(first, next(it))])
 
-	if len(data) & 1:
-		data.append(default) # TODO Don't modify?
+		self.next = BinaryLayer(data2, default2)
 
-	mapping = AutoMapping()
-	default2 = mapping[(default, default)]
-	data2 = []
-	it = iter(data)
-	for first in it: data2.append(mapping[(first, next(it))])
+	def solve(self):
 
-	return solve(data2, default2, layer)
+		solution = BinarySolution(1 if self.bandwidth > 1 else 0,
+					  self.extraOps,
+					  self.bytes)
+		self.solutions[solution.key] = solution
+		if self.next is None:
+			return
+		self.next.solve()
+
+		mult = 2
+		layer = self.next
+		while layer is not None:
+
+			extraCost = ceil(layer.bandwidth * mult * self.unitBits / 8)
+
+			for s in layer.solutions.values():
+				nLookups = s.nLookups + 1
+				nExtraOps = s.nExtraOps + self.extraOps
+				cost = s.cost + extraCost
+				solution = BinarySolution(nLookups, nExtraOps, cost, mult)
+				if (solution.key not in self.solutions or
+				    solution.cost < self.solutions[solution.key].cost):
+					self.solutions[solution.key] = solution
+
+			layer = layer.next
+			mult <<= 1
+
+def solve(data, default):
+
+	layer = BinaryLayer(data, default)
+	layer.solve()
+	return layer.solutions
 
 
 if __name__ == "__main__":
