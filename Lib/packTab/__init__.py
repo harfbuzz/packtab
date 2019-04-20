@@ -22,10 +22,10 @@ except ImportError:
 	from functools import partial
 	log2 = partial(log, base=2)
 
-class defaultMapping(collections.defaultdict):
+class AutoMapping(collections.defaultdict):
 	_next = 0
 	def __missing__(self, key):
-		assert type(key) is str
+		assert type(key) is not int
 		v = self._next
 		self._next = self._next + 1
 		self[key] = v
@@ -68,7 +68,7 @@ def pack_table(data, mapping=None, default=0):
 		mapping = mapping2
 		del mapping2
 	else:
-		mapping = defaultMapping()
+		mapping = AutoMapping()
 
 	# Set up data as a list.
 	if isinstance(data, dict):
@@ -96,20 +96,60 @@ def binaryBitsFor(n):
 	"""Returns smalles power-of-two number of bits needed to represent n
 	different values.
 
+	>>> binaryBitsFor(1)
+	0
 	>>> binaryBitsFor(2)
 	1
 	>>> binaryBitsFor(7)
 	4
+	>>> binaryBitsFor(15)
+	4
+	>>> binaryBitsFor(16)
+	4
+	>>> binaryBitsFor(17)
+	8
 	>>> binaryBitsFor(100)
 	8
 	"""
+	if n is 1: return 0
 	return 1 << ceil(log2(log2(n)))
 
-def solve(data, default):
-	minV, maxV = min(data), max(data)
-	bandwidth = maxV - minV + 1
-	assert bandwidth > 1
-	bits = binaryBitsFor(bandwidth)
+class Solution:
+	pass
+
+class Layer:
+
+	def __init__(self, data, default, nextLayer=None):
+		self.data = data
+		self.default = default
+		self.next = nextLayer
+		self.solutions = dict()
+
+		self.minV, self.maxV = min(data), max(data)
+		self.bandwidth = self.maxV - self.minV + 1
+		self.unitBits = binaryBitsFor(self.bandwidth)
+		self.bytes = ceil(self.unitBits * len(self.data) / 8)
+
+def solve(data, default, lastLayer=None):
+
+	layer = Layer(data, default, lastLayer)
+
+	while lastLayer is not None:
+		lastLayer = lastLayer.next
+
+	if len(data) is 1:
+		return layer
+
+	if len(data) & 1:
+		data.append(default) # TODO Don't modify?
+
+	mapping = AutoMapping()
+	default2 = mapping[(default, default)]
+	data2 = []
+	it = iter(data)
+	for first in it: data2.append(mapping[(first, next(it))])
+
+	return solve(data2, default2, layer)
 
 
 if __name__ == "__main__":
