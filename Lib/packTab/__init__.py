@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from __future__ import print_function, division, absolute_import
-import array
 import collections
 
 class defaultMapping(collections.defaultdict):
@@ -76,10 +75,12 @@ def pack_table(data, mapping=None, default=0):
 		data = data2
 		del data2
 
-	# Set up data as an array.
+	# Convert all to integers
 	assert (all(type(v) is int for v in data) or
 		all(type(v) is str for v in data))
 	if type(data[0]) is str:
 		data = [mapping[v] for v in data]
+	if type(default) is str:
+		default = mapping[default]
 
 

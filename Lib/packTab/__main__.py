@@ -13,11 +13,23 @@
 # limitations under the License.
 
 from __future__ import print_function, division, absolute_import
-import sys
 from . import *
+import sys
+import unicodedata as ucd
+
+try:
+	chr = unichr
+	try:
+		unichr(0x10000)
+	except ValueError:
+		raise Exception("Narrow Python build.  Use Python3 instead.")
+except NameError:
+	pass
 
 def main(args=sys.argv):
-	print("Hello")
+	f = ucd.category
+	data = [f(chr(u)) for u in range(0x110000)]
+	print(pack_table(data, None, 'Cn'))
 	return 0
 
 if __name__ == "__main__":
