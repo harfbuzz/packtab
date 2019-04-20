@@ -64,7 +64,7 @@ def pack_table(data, mapping=None, default=0):
 	else:
 		mapping = defaultMapping()
 
-	# Set up data as a list.  TODO: Skip list intermediate.
+	# Set up data as a list.
 	if isinstance(data, dict):
 		assert(all(type(k) is int and type(v) in (int, str) for k,v in data.items()))
 		minK = min(dict.keys())
