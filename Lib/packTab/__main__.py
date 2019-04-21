@@ -32,8 +32,8 @@ def solve(data, default):
 	print("All dominant solutions:")
 	for s in solutions:
 		print(s)
-	optimal = min(solutions, key=lambda s: s.nLookups * s.nLookups * s.cost)
-	compact = min(solutions, key=lambda s: s.nLookups * s.fullCost)
+	optimal = min(solutions, key=lambda s: s.nLookups * s.nLookups * s.fullCost)
+	compact = min(solutions, key=lambda s: s.nLookups * s.fullCost * s.fullCost)
 	print ("Optimal solution:", optimal)
 	print ("Compact solution:", compact)
 
