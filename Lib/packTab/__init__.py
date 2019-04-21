@@ -131,7 +131,7 @@ class BinarySolution:
 		return self.cost + (self.nLookups * lookupOps + self.nExtraOps) * bytesPerOp
 
 	def __repr__(self):
-		return "BinarySolution(%d,%d,%d,%d)" % \
+		return "BinarySolution(%d, %d, %d, %d)" % \
 			(self.nLookups, self.nExtraOps, self.cost, self.mult)
 
 class BinaryLayer:

@@ -29,7 +29,7 @@ except NameError:
 def solve(data, default):
 	print("Unique values:", len(set(data)))
 	solutions = pack_table(data, None, default).solutions
-	print("All dominant solutions:")
+	print("All dominant solutions: (nLookups, nExtraOps, cost, fanOut)")
 	for s in solutions:
 		print(s)
 	optimal = min(solutions, key=lambda s: s.nLookups * s.nLookups * s.fullCost)
