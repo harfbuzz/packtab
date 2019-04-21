@@ -223,7 +223,7 @@ def solve(data, default):
 
 	layer = BinaryLayer(data, default)
 	layer.solve()
-	return layer.solutions
+	return layer
 
 
 if __name__ == "__main__":
