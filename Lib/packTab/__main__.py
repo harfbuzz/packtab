@@ -26,12 +26,48 @@ try:
 except NameError:
 	pass
 
-def main(args=sys.argv):
-	f = ucd.category
-	data = [f(chr(u)) for u in range(0x110000)]
-	solutions = pack_table(data, None, 'Cn').solutions
+def solve(data, default):
+	print("Unique values:", len(set(data)))
+	solutions = pack_table(data, None, default).solutions
+	print("All dominant solutions:")
 	for s in solutions:
-		print(s.nLookups * s.fullCost, s.fullCost, s)
+		print(s)
+	optimal = min(solutions, key=lambda s: s.nLookups * s.nLookups * s.cost)
+	compact = min(solutions, key=lambda s: s.nLookups * s.fullCost)
+	print ("Optimal solution:", optimal)
+	print ("Compact solution:", compact)
+
+def main(args=sys.argv):
+
+	print("General_Category:")
+	f, default = ucd.category, 'Cn'
+	gc_data = [f(chr(u)) for u in range(0x110000)]
+	solve(gc_data, default)
+	print()
+
+	print("Canonical_Combining_Class:")
+	f, default = ucd.combining, 0
+	ccc_data = [f(chr(u)) for u in range(0x110000)]
+	solve(ccc_data, default)
+	print()
+
+	print("General_Category and Canonical_Combining_Class combined:")
+	f, default = ucd.combining, 0
+	gc_ccc_data = [gc+str(ccc) for gc,ccc in zip(gc_data, ccc_data)]
+	solve(gc_ccc_data, default)
+	print()
+
+	print("Mirrored:")
+	f, default = ucd.mirrored, 0
+	mirrored_data = [f(chr(u)) for u in range(0x110000)]
+	solve(mirrored_data, default)
+	print()
+
+	print("GC of all mirrored characters:")
+	mirrored_gcs = [gc for m,gc in zip(mirrored_data, gc_data) if m]
+	print(set(mirrored_gcs))
+	print()
+
 	return 0
 
 if __name__ == "__main__":
