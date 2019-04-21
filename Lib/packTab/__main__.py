@@ -31,7 +31,7 @@ def main(args=sys.argv):
 	data = [f(chr(u)) for u in range(0x110000)]
 	solutions = pack_table(data, None, 'Cn').solutions
 	for s in solutions:
-		print(s.nLookups * s.cost, s)
+		print(s.nLookups * s.fullCost, s.fullCost, s)
 	return 0
 
 if __name__ == "__main__":

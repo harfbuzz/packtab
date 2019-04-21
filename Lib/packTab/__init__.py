@@ -114,8 +114,9 @@ def binaryBitsFor(n):
 	if n is 1: return 0
 	return 1 << ceil(log2(log2(n)))
 
-bytesPerExtraOp = 4
-subByteAccessExtraOps = 3
+bytesPerOp = 4
+lookupOps = 4
+subByteAccessOps = 4
 
 class BinarySolution:
 
@@ -127,7 +128,7 @@ class BinarySolution:
 
 	@property
 	def fullCost(self):
-		return self.cost + self.nExtraOps + bytesPerExtraOp
+		return self.cost + (self.nLookups * lookupOps + self.nExtraOps) * bytesPerOp
 
 	def __repr__(self):
 		return "BinarySolution(%d,%d,%d,%d)" % \
@@ -150,7 +151,7 @@ class BinaryLayer:
 		self.minV, self.maxV = min(data), max(data)
 		self.bandwidth = self.maxV - self.minV + 1
 		self.unitBits = binaryBitsFor(self.bandwidth)
-		self.extraOps = subByteAccessExtraOps if self.unitBits < 8 else 0
+		self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
 		self.bytes = ceil(self.unitBits * len(self.data) / 8)
 
 		if len(data) is 1 or self.bandwidth is 1:
@@ -210,8 +211,7 @@ class BinaryLayer:
 				if b.cost is -1: continue
 
 				# Rules of dominance: a being not worse than b
-				if ((a.nLookups < b.nLookups and a.cost < b.cost) or
-				    (a.nLookups == b.nLookups and a.fullCost <= b.fullCost)):
+				if a.nLookups <= b.nLookups and a.fullCost <= b.fullCost:
 					b.cost = -1
 					continue
 
