@@ -114,14 +114,20 @@ def binaryBitsFor(n):
 	if n is 1: return 0
 	return 1 << ceil(log2(log2(n)))
 
+bytesPerExtraOp = 4
+subByteAccessExtraOps = 3
+
 class BinarySolution:
+
 	def __init__(self, nLookups, nExtraOps, cost, mult=0):
 		self.nLookups = nLookups
 		self.nExtraOps = nExtraOps
 		self.cost = cost
 		self.mult = mult
 
-		self.key = (nLookups, nExtraOps)
+	@property
+	def fullCost(self):
+		return self.cost + self.nExtraOps + bytesPerExtraOp
 
 	def __repr__(self):
 		return "BinarySolution(%d,%d,%d,%d)" % \
@@ -139,12 +145,12 @@ class BinaryLayer:
 		self.data = data
 		self.default = default
 		self.next = None
-		self.solutions = {}
+		self.solutions = []
 
 		self.minV, self.maxV = min(data), max(data)
 		self.bandwidth = self.maxV - self.minV + 1
 		self.unitBits = binaryBitsFor(self.bandwidth)
-		self.extraOps = 1 if self.unitBits < 8 else 0
+		self.extraOps = subByteAccessExtraOps if self.unitBits < 8 else 0
 		self.bytes = ceil(self.unitBits * len(self.data) / 8)
 
 		if len(data) is 1 or self.bandwidth is 1:
@@ -169,7 +175,7 @@ class BinaryLayer:
 		solution = BinarySolution(1 if self.bandwidth > 1 else 0,
 					  self.extraOps,
 					  self.bytes)
-		self.solutions[solution.key] = solution
+		self.solutions.append(solution)
 		if self.next is None:
 			return
 		self.next.solve()
@@ -180,17 +186,38 @@ class BinaryLayer:
 
 			extraCost = ceil(layer.bandwidth * mult * self.unitBits / 8)
 
-			for s in layer.solutions.values():
+			for s in layer.solutions:
 				nLookups = s.nLookups + 1
 				nExtraOps = s.nExtraOps + self.extraOps
 				cost = s.cost + extraCost
 				solution = BinarySolution(nLookups, nExtraOps, cost, mult)
-				if (solution.key not in self.solutions or
-				    solution.cost < self.solutions[solution.key].cost):
-					self.solutions[solution.key] = solution
+				self.solutions.append(solution)
 
 			layer = layer.next
 			mult <<= 1
+
+		self.prune_solutions()
+
+	def prune_solutions(self):
+		"""Remove dominated solutions."""
+
+		# Doing it the slowest, O(N^2), way for now.
+		sols = self.solutions
+		for a in sols:
+			if a.cost is -1: continue
+			for b in sols:
+				if a is b: continue
+				if b.cost is -1: continue
+
+				# Rules of dominance: a being not worse than b
+				if ((a.nLookups < b.nLookups and a.cost < b.cost) or
+				    (a.nLookups == b.nLookups and a.fullCost <= b.fullCost)):
+					b.cost = -1
+					continue
+
+		self.solutions = [s for s in self.solutions if s.cost is not -1]
+		self.solutions.sort(key=lambda s: s.nLookups)
+
 
 def solve(data, default):
 
