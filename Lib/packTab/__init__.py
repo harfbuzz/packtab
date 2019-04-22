@@ -198,8 +198,8 @@ def pack_table(data, mapping=None, default=0):
 
 	# Set up mapping.  See docstring.
 	if mapping is not None:
-		assert (all(isinstance(k, int) and isinstance(v, str) for k,v in mapping.items()) or
-			all(isinstance(k, str) and isinstance(v, int) for k,v in mapping.items()))
+		assert (all(isinstance(k, int) and not isinstance(v, int) for k,v in mapping.items()) or
+			all(not isinstance(k, int) and isinstance(v, int) for k,v in mapping.items()))
 		mapping2 = mapping.copy()
 		for k,v in mapping.items():
 			mapping2[v] = k
@@ -210,7 +210,7 @@ def pack_table(data, mapping=None, default=0):
 
 	# Set up data as a list.
 	if isinstance(data, dict):
-		assert(all(isinstance(k, int) and isinstance(v, (int, str)) for k,v in data.items()))
+		assert(all(isinstance(k, int) for k,v in data.items()))
 		minK = min(dict.keys())
 		maxK = max(dict.keys())
 		assert minK >= 0
