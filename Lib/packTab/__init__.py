@@ -211,8 +211,8 @@ def pack_table(data, mapping=None, default=0):
 	# Set up data as a list.
 	if isinstance(data, dict):
 		assert(all(isinstance(k, int) for k,v in data.items()))
-		minK = min(dict.keys())
-		maxK = max(dict.keys())
+		minK = min(data.keys())
+		maxK = max(data.keys())
 		assert minK >= 0
 		data2 = [default] * (maxK + 1)
 		for k,v in data.items():
@@ -222,10 +222,10 @@ def pack_table(data, mapping=None, default=0):
 
 	# Convert all to integers
 	assert (all(isinstance(v, int) for v in data) or
-		all(isinstance(v, str) for v in data))
-	if isinstance(data[0], str):
+		all(not isinstance(v, int) for v in data))
+	if not isinstance(data[0], int):
 		data = [mapping[v] for v in data]
-	if isinstance(default, str):
+	if not isinstance(default, int):
 		default = mapping[default]
 
 	return solve(data, default)
