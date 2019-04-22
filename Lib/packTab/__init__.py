@@ -29,7 +29,7 @@ __all__ = ['pack_table']
 class AutoMapping(collections.defaultdict):
 	_next = 0
 	def __missing__(self, key):
-		assert type(key) is not int
+		assert not isinstance(key, int)
 		v = self._next
 		self._next = self._next + 1
 		self[key] = v
@@ -55,7 +55,7 @@ def binaryBitsFor(n):
 	>>> binaryBitsFor(100)
 	8
 	"""
-	if n is 1: return 0
+	if n == 1: return 0
 	return 1 << ceil(log2(log2(n)))
 
 bytesPerOp = 4
@@ -98,7 +98,7 @@ class BinaryLayer:
 		self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
 		self.bytes = ceil(self.unitBits * len(self.data) / 8)
 
-		if len(data) is 1 or self.bandwidth is 1:
+		if len(data) == 1 or self.bandwidth == 1:
 			return
 
 		self.split()
@@ -149,17 +149,17 @@ class BinaryLayer:
 		# Doing it the slowest, O(N^2), way for now.
 		sols = self.solutions
 		for a in sols:
-			if a.cost is -1: continue
+			if a.cost == None: continue
 			for b in sols:
 				if a is b: continue
-				if b.cost is -1: continue
+				if b.cost == None: continue
 
 				# Rules of dominance: a being not worse than b
 				if a.nLookups <= b.nLookups and a.fullCost <= b.fullCost:
-					b.cost = -1
+					b.cost = None
 					continue
 
-		self.solutions = [s for s in self.solutions if s.cost is not -1]
+		self.solutions = [s for s in self.solutions if s.cost is not None]
 		self.solutions.sort(key=lambda s: s.nLookups)
 
 def solve(data, default):
@@ -198,8 +198,8 @@ def pack_table(data, mapping=None, default=0):
 
 	# Set up mapping.  See docstring.
 	if mapping is not None:
-		assert (all(type(k) is int and type(v) is str for k,v in mapping.items()) or
-			all(type(k) is str and type(v) is int for k,v in mapping.items()))
+		assert (all(isinstance(k, int) and isinstance(v, str) for k,v in mapping.items()) or
+			all(isinstance(k, str) and isinstance(v, int) for k,v in mapping.items()))
 		mapping2 = mapping.copy()
 		for k,v in mapping.items():
 			mapping2[v] = k
@@ -210,7 +210,7 @@ def pack_table(data, mapping=None, default=0):
 
 	# Set up data as a list.
 	if isinstance(data, dict):
-		assert(all(type(k) is int and type(v) in (int, str) for k,v in data.items()))
+		assert(all(isinstance(k, int) and isinstance(v, (int, str)) for k,v in data.items()))
 		minK = min(dict.keys())
 		maxK = max(dict.keys())
 		assert minK >= 0
@@ -221,11 +221,11 @@ def pack_table(data, mapping=None, default=0):
 		del data2
 
 	# Convert all to integers
-	assert (all(type(v) is int for v in data) or
-		all(type(v) is str for v in data))
-	if type(data[0]) is str:
+	assert (all(isinstance(v, int) for v in data) or
+		all(isinstance(v, str) for v in data))
+	if isinstance(data[0], str):
 		data = [mapping[v] for v in data]
-	if type(default) is str:
+	if isinstance(default, str):
 		default = mapping[default]
 
 	return solve(data, default)
