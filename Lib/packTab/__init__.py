@@ -23,6 +23,9 @@ except ImportError:
 	log2 = partial(log, base=2)
 
 
+__all__ = ['pack_table']
+
+
 class AutoMapping(collections.defaultdict):
 	_next = 0
 	def __missing__(self, key):
