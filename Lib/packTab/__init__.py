@@ -22,6 +22,7 @@ except ImportError:
 	from functools import partial
 	log2 = partial(log, base=2)
 
+
 class AutoMapping(collections.defaultdict):
 	_next = 0
 	def __missing__(self, key):
@@ -31,66 +32,6 @@ class AutoMapping(collections.defaultdict):
 		self[key] = v
 		self[v] = key
 		return v
-
-def pack_table(data, mapping=None, default=0):
-	"""
-
-	@data is either a dictionary mapping integer keys to values, of an
-	iterable containing values for keys starting at zero.  Values must
-	all be integers, or all strings.
-
-	@mapping, if set, should be either a mapping from integer keys to
-	string values, or vice versa.  Either way, it's first augmented by its
-	own inverse.  After that it's used to map any value in @data that is
-	not an integer, to obtain its integer value used for packing size
-	considerations.  When generating output table, integer values are tried
-	mapped through mapping to obtain string mnemonic to write out.  If such
-	mapping does not exist, the integer value will be written out.
-
-	If mapping is not set, it will be automatically populated to assign
-	increasing integers starting from zero, to every new string key in
-	@data.  This internal mapping only affects value size assumptions, but
-	will not otherwise be visible in the output.
-
-	@default is value to be used for keys not specified in @data.  Defaults
-	to zero.  If data values are strings and @mapping is not provided, then
-	@default must be specified, or bad things might happen.
-
-	"""
-
-	# Set up mapping.  See docstring.
-	if mapping is not None:
-		assert (all(type(k) is int and type(v) is str for k,v in mapping.items()) or
-			all(type(k) is str and type(v) is int for k,v in mapping.items()))
-		mapping2 = mapping.copy()
-		for k,v in mapping.items():
-			mapping2[v] = k
-		mapping = mapping2
-		del mapping2
-	else:
-		mapping = AutoMapping()
-
-	# Set up data as a list.
-	if isinstance(data, dict):
-		assert(all(type(k) is int and type(v) in (int, str) for k,v in data.items()))
-		minK = min(dict.keys())
-		maxK = max(dict.keys())
-		assert minK >= 0
-		data2 = [default] * (maxK + 1)
-		for k,v in data.items():
-			data2[k] = v
-		data = data2
-		del data2
-
-	# Convert all to integers
-	assert (all(type(v) is int for v in data) or
-		all(type(v) is str for v in data))
-	if type(data[0]) is str:
-		data = [mapping[v] for v in data]
-	if type(default) is str:
-		default = mapping[default]
-
-	return solve(data, default)
 
 def binaryBitsFor(n):
 	"""Returns smalles power-of-two number of bits needed to represent n
@@ -218,12 +159,73 @@ class BinaryLayer:
 		self.solutions = [s for s in self.solutions if s.cost is not -1]
 		self.solutions.sort(key=lambda s: s.nLookups)
 
-
 def solve(data, default):
 
 	layer = BinaryLayer(data, default)
 	layer.solve()
 	return layer
+
+
+# Public API
+def pack_table(data, mapping=None, default=0):
+	"""
+
+	@data is either a dictionary mapping integer keys to values, of an
+	iterable containing values for keys starting at zero.  Values must
+	all be integers, or all strings.
+
+	@mapping, if set, should be either a mapping from integer keys to
+	string values, or vice versa.  Either way, it's first augmented by its
+	own inverse.  After that it's used to map any value in @data that is
+	not an integer, to obtain its integer value used for packing size
+	considerations.  When generating output table, integer values are tried
+	mapped through mapping to obtain string mnemonic to write out.  If such
+	mapping does not exist, the integer value will be written out.
+
+	If mapping is not set, it will be automatically populated to assign
+	increasing integers starting from zero, to every new string key in
+	@data.  This internal mapping only affects value size assumptions, but
+	will not otherwise be visible in the output.
+
+	@default is value to be used for keys not specified in @data.  Defaults
+	to zero.  If data values are strings and @mapping is not provided, then
+	@default must be specified, or bad things might happen.
+
+	"""
+
+	# Set up mapping.  See docstring.
+	if mapping is not None:
+		assert (all(type(k) is int and type(v) is str for k,v in mapping.items()) or
+			all(type(k) is str and type(v) is int for k,v in mapping.items()))
+		mapping2 = mapping.copy()
+		for k,v in mapping.items():
+			mapping2[v] = k
+		mapping = mapping2
+		del mapping2
+	else:
+		mapping = AutoMapping()
+
+	# Set up data as a list.
+	if isinstance(data, dict):
+		assert(all(type(k) is int and type(v) in (int, str) for k,v in data.items()))
+		minK = min(dict.keys())
+		maxK = max(dict.keys())
+		assert minK >= 0
+		data2 = [default] * (maxK + 1)
+		for k,v in data.items():
+			data2[k] = v
+		data = data2
+		del data2
+
+	# Convert all to integers
+	assert (all(type(v) is int for v in data) or
+		all(type(v) is str for v in data))
+	if type(data[0]) is str:
+		data = [mapping[v] for v in data]
+	if type(default) is str:
+		default = mapping[default]
+
+	return solve(data, default)
 
 
 if __name__ == "__main__":
