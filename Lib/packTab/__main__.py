@@ -26,7 +26,7 @@ try:
 except NameError:
 	pass
 
-def solve(data, default):
+def solve(data, default=0):
 	print("Unique values:", len(set(data)))
 	solutions = pack_table(data, None, default).solutions
 	print("All dominant solutions: (nLookups, nExtraOps, cost, fanOut)")
