@@ -46,7 +46,6 @@ import sys
 import collections
 from math import ceil
 from itertools import count
-import sympy as sp
 try:
 	from math import log2
 except ImportError:
@@ -130,17 +129,17 @@ def typeFor(minV, maxV):
 
 class BinarySolution(Solution):
 
-	def __init__(self, layer, nxt, nLookups, nExtraOps, cost, mult=0):
+	def __init__(self, layer, nxt, nLookups, nExtraOps, cost, bits=0):
 		Solution.__init__(self, layer, nxt, nLookups, nExtraOps, cost)
-		self.mult = mult
+		self.bits = bits
 
 	def __repr__(self):
 		return "%s%s" % (self.__class__.__name__,
-			(self.nLookups, self.nExtraOps, self.cost, self.mult))
+			(self.nLookups, self.nExtraOps, self.cost, self.bits))
 
 	def genCode(self, var, symbols=None, header=None):
 		if symbols is None:
-			symbols = (sp.Symbol('lookup%d'%i) for i in count())
+			symbols = ('lookup%d'%i for i in count())
 
 		name = next(symbols)
 		typ = typeFor(self.layer.minV, self.layer.maxV)
@@ -151,11 +150,11 @@ class BinarySolution(Solution):
 		expr = var
 
 		if self.nxt:
-			header, nxtPayload, nxtExpr = self.nxt.genCode(var, symbols, header)
+			header, nxtPayload, nxtExpr = self.nxt.genCode("var/%s"%(1<<self.bits), symbols, header)
 
 			payload.extend(nxtPayload)
 
-			expr = sp.IndexedBase(name)[nxtExpr]
+			expr = '%s[%s]+%s'%(name, nxtExpr, "(("+var+"/12)&3)")
 
 		if self.layer.unitBits == 1:
 			header['static inline bits1(const uint8_t *a, unsigned i) { return (a[i>>3] >> (i&7)) & 1; }'] = None
@@ -218,21 +217,21 @@ class BinaryLayer:
 			return
 		self.next.solve()
 
-		mult = 2
+		bits = 1
 		layer = self.next
 		while layer is not None:
 
-			extraCost = ceil(layer.bandwidth * mult * self.unitBits / 8)
+			extraCost = ceil(layer.bandwidth * (2<<bits) * self.unitBits / 8)
 
 			for s in layer.solutions:
 				nLookups = s.nLookups + 1
 				nExtraOps = s.nExtraOps + self.extraOps
 				cost = s.cost + extraCost
-				solution = BinarySolution(self, s, nLookups, nExtraOps, cost, mult)
+				solution = BinarySolution(self, s, nLookups, nExtraOps, cost, bits)
 				self.solutions.append(solution)
 
 			layer = layer.next
-			mult <<= 1
+			bits += 1
 
 		self.prune_solutions()
 
