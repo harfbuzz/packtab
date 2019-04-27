@@ -91,21 +91,29 @@ bytesPerOp = 4
 lookupOps = 4
 subByteAccessOps = 4
 
-class BinarySolution:
-
-	def __init__(self, nLookups, nExtraOps, cost, mult=0):
+class Solution:
+	def __init__(self, nLookups, nExtraOps, cost):
 		self.nLookups = nLookups
 		self.nExtraOps = nExtraOps
 		self.cost = cost
-		self.mult = mult
 
 	@property
 	def fullCost(self):
 		return self.cost + (self.nLookups * lookupOps + self.nExtraOps) * bytesPerOp
 
 	def __repr__(self):
-		return "BinarySolution(%d, %d, %d, %d)" % \
-			(self.nLookups, self.nExtraOps, self.cost, self.mult)
+		return "%s%s" % (self.__class__.__name__,
+			(self.nLookups, self.nExtraOps, self.cost))
+
+class BinarySolution(Solution):
+
+	def __init__(self, nLookups, nExtraOps, cost, mult=0):
+		Solution.__init__(self, nLookups, nExtraOps, cost)
+		self.mult = mult
+
+	def __repr__(self):
+		return "%s%s" % (self.__class__.__name__,
+			(self.nLookups, self.nExtraOps, self.cost, self.mult))
 
 class BinaryLayer:
 
