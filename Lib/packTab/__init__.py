@@ -42,6 +42,7 @@ Pack a static table of integers into compact lookup tables to save space.
 """
 
 from __future__ import print_function, division, absolute_import
+import sys
 import collections
 from math import ceil
 from itertools import count
@@ -52,6 +53,10 @@ except ImportError:
 	from math import log
 	from functools import partial
 	log2 = lambda x: log(x, 2)
+
+if sys.version_info[0] < 3:
+	_float_ceil = ceil
+	ceil = lambda x: int(_float_ceil(x))
 
 
 __all__ = ['pack_table']
@@ -280,5 +285,5 @@ def pack_table(data, mapping=None, default=0):
 
 
 if __name__ == "__main__":
-	import sys, doctest
+	import doctest
 	sys.exit(doctest.testmod().failed)

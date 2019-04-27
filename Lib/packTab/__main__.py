@@ -17,30 +17,13 @@ from . import *
 import sys
 import unicodedata as ucd
 
-try:
+if sys.version_info[0] < 3:
+
 	if sys.maxunicode < 0x10FFFF:
 		# workarounds for Python 2 "narrow" builds with UCS2-only support.
 
 		_narrow_unichr = unichr
-
 		def unichr(i):
-			"""
-			Return the unicode character whose Unicode code is the integer 'i'.
-			The valid range is 0 to 0x10FFFF inclusive.
-
-			>>> _narrow_unichr(0xFFFF + 1)
-			Traceback (most recent call last):
-			  File "<stdin>", line 1, in ?
-			ValueError: unichr() arg not in range(0x10000) (narrow Python build)
-			>>> unichr(0xFFFF + 1) == u'\U00010000'
-			True
-			>>> unichr(1114111) == u'\U0010FFFF'
-			True
-			>>> unichr(0x10FFFF + 1)
-			Traceback (most recent call last):
-			  File "<stdin>", line 1, in ?
-			ValueError: unichr() arg not in range(0x110000)
-			"""
 			try:
 				return _narrow_unichr(i)
 			except ValueError:
@@ -50,11 +33,8 @@ try:
 					return escape_str.decode("unicode-escape")
 				except UnicodeDecodeError:
 					raise ValueError('unichr() arg not in range(0x110000)')
-
 	chr = unichr
 
-except NameError:
-	pass
 
 def solve(data, default=0):
 	print("Unique values:", len(set(data)))
