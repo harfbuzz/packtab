@@ -51,7 +51,7 @@ try:
 except ImportError:
 	from math import log
 	from functools import partial
-	log2 = partial(log, base=2)
+	log2 = lambda x: log(x, 2)
 
 
 __all__ = ['pack_table']
