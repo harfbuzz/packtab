@@ -99,7 +99,9 @@ lookupOps = 4
 subByteAccessOps = 4
 
 class Solution:
-	def __init__(self, nLookups, nExtraOps, cost):
+	def __init__(self, layer, nxt, nLookups, nExtraOps, cost):
+		self.layer = layer
+		self.nxt = nxt
 		self.nLookups = nLookups
 		self.nExtraOps = nExtraOps
 		self.cost = cost
@@ -128,8 +130,8 @@ def typeFor(minV, maxV):
 
 class BinarySolution(Solution):
 
-	def __init__(self, nLookups, nExtraOps, cost, mult=0):
-		Solution.__init__(self, nLookups, nExtraOps, cost)
+	def __init__(self, layer, nxt, nLookups, nExtraOps, cost, mult=0):
+		Solution.__init__(self, layer, nxt, nLookups, nExtraOps, cost)
 		self.mult = mult
 
 	def __repr__(self):
@@ -141,10 +143,18 @@ class BinarySolution(Solution):
 			symbols = (sp.Symbol('lookup%d'%i) for i in count())
 
 		name = next(symbols)
-		typ = 'uint8_t'
+		typ = typeFor(self.layer.minV, self.layer.maxV)
 
 		expr = var
 		payload = []
+
+		if self.nxt:
+			nxtPayload, nxtExpr = self.nxt.genCode(var, symbols)
+
+			payload.extend(nxtPayload)
+
+			expr = sp.IndexedBase(name)[nxtExpr]
+
 		payload.append('static const %s %s = {' % (typ, name))
 		payload.append('};')
 
@@ -189,7 +199,9 @@ class BinaryLayer:
 
 	def solve(self):
 
-		solution = BinarySolution(1 if self.bandwidth > 1 else 0,
+		solution = BinarySolution(self,
+					  None,
+					  1 if self.bandwidth > 1 else 0,
 					  self.extraOps,
 					  self.bytes)
 		self.solutions.append(solution)
@@ -207,7 +219,7 @@ class BinaryLayer:
 				nLookups = s.nLookups + 1
 				nExtraOps = s.nExtraOps + self.extraOps
 				cost = s.cost + extraCost
-				solution = BinarySolution(nLookups, nExtraOps, cost, mult)
+				solution = BinarySolution(self, s, nLookups, nExtraOps, cost, mult)
 				self.solutions.append(solution)
 
 			layer = layer.next
