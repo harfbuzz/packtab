@@ -112,6 +112,20 @@ class Solution:
 		return "%s%s" % (self.__class__.__name__,
 			(self.nLookups, self.nExtraOps, self.cost))
 
+def typeFor(minV, maxV):
+
+	if 0 <= minV and maxV <= 255: return 'uint8_t'
+	if -128 <= minV and maxV <= 127: return 'int8_t'
+
+	if 0 <= minV and maxV <= 65535: return 'uint16_t'
+	if -32768 <= minV and maxV <= 32767: return 'int16_t'
+
+	if 0 <= minV and maxV <= 4294967295: return 'uint32_t'
+	if -2147483648 <= minV and maxV <= 2147483647: return 'int32_t'
+
+	if 0 <= minV: return 'uint64_t'
+	return 'int64_t'
+
 class BinarySolution(Solution):
 
 	def __init__(self, nLookups, nExtraOps, cost, mult=0):
@@ -124,10 +138,15 @@ class BinarySolution(Solution):
 
 	def genCode(self, var, symbols=None):
 		if symbols is None:
-			symbols = (sp.Symbol('lookup%d'%i for i in count()))
+			symbols = (sp.Symbol('lookup%d'%i) for i in count())
+
+		name = next(symbols)
+		typ = 'uint8_t'
 
 		expr = var
 		payload = []
+		payload.append('static const %s %s = {' % (typ, name))
+		payload.append('};')
 
 		return payload, expr
 

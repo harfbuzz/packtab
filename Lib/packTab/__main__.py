@@ -16,6 +16,7 @@ from __future__ import print_function, division, absolute_import
 from . import *
 import sys
 import unicodedata as ucd
+import sympy as sp
 
 if sys.version_info[0] < 3:
 
@@ -44,8 +45,11 @@ def solve(data, default=0):
 		print(s)
 	optimal = min(solutions, key=lambda s: s.nLookups * s.nLookups * s.fullCost)
 	compact = min(solutions, key=lambda s: s.nLookups * s.fullCost * s.fullCost)
-	print ("Optimal solution:", optimal)
-	print ("Compact solution:", compact)
+	print("Optimal solution:", optimal)
+	print("Compact solution:", compact)
+	payload, expr = compact.genCode(sp.Symbol('u'))
+	print('\n'.join(payload))
+	print('(void)', expr)
 
 def main(args=sys.argv):
 
