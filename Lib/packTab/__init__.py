@@ -138,27 +138,36 @@ class BinarySolution(Solution):
 		return "%s%s" % (self.__class__.__name__,
 			(self.nLookups, self.nExtraOps, self.cost, self.mult))
 
-	def genCode(self, var, symbols=None):
+	def genCode(self, var, symbols=None, header=None):
 		if symbols is None:
 			symbols = (sp.Symbol('lookup%d'%i) for i in count())
 
 		name = next(symbols)
 		typ = typeFor(self.layer.minV, self.layer.maxV)
 
-		expr = var
+		if header is None:
+			header = collections.OrderedDict()
 		payload = []
+		expr = var
 
 		if self.nxt:
-			nxtPayload, nxtExpr = self.nxt.genCode(var, symbols)
+			header, nxtPayload, nxtExpr = self.nxt.genCode(var, symbols, header)
 
 			payload.extend(nxtPayload)
 
 			expr = sp.IndexedBase(name)[nxtExpr]
 
+		if self.layer.unitBits == 1:
+			header['static inline bits1(const uint8_t *a, unsigned i) { return (a[i>>3] >> (i&7)) & 1; }'] = None
+		elif self.layer.unitBits == 2:
+			header['static inline bits2(const uint8_t *a, unsigned i) { return (a[i>>2] >> (i&3)) & 3; }'] = None
+		elif self.layer.unitBits == 4:
+			header['static inline bits4(const uint8_t *a, unsigned i) { return (a[i>>1] >> (i&1)) & 7; }'] = None
+
 		payload.append('static const %s %s = {' % (typ, name))
 		payload.append('};')
 
-		return payload, expr
+		return header, payload, expr
 
 class BinaryLayer:
 
