@@ -44,6 +44,8 @@ Pack a static table of integers into compact lookup tables to save space.
 from __future__ import print_function, division, absolute_import
 import collections
 from math import ceil
+from itertools import count
+import sympy as sp
 try:
 	from math import log2
 except ImportError:
@@ -114,6 +116,15 @@ class BinarySolution(Solution):
 	def __repr__(self):
 		return "%s%s" % (self.__class__.__name__,
 			(self.nLookups, self.nExtraOps, self.cost, self.mult))
+
+	def genCode(self, var, symbols=None):
+		if symbols is None:
+			symbols = (sp.Symbol('lookup%d'%i for i in count()))
+
+		expr = var
+		payload = []
+
+		return payload, expr
 
 class BinaryLayer:
 
