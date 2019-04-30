@@ -14,6 +14,7 @@
 
 from __future__ import print_function, division, absolute_import
 from . import *
+from . import log2
 import sys
 import unicodedata as ucd
 
@@ -36,6 +37,26 @@ if sys.version_info[0] < 3:
 	chr = unichr
 
 
+def print_solution(solution):
+	print()
+	functions, arrays, expr = solution.genCode('u')
+	for (ret, name, args), body in functions.items():
+		print('static inline %s %s (%s) { %s }' % (ret, name, args, body))
+	print()
+	for (elt, name), values in arrays.items():
+		print('static const %s %s[%s] = {' % (elt, name, len(values)))
+		w = max(len(str(v)) for v in values)
+		n = 1 << int(log2(78 / (w + 1)))
+		if (w + 2) * n <= 78:
+			w += 1
+		for i in range(0, len(values), n):
+			line = values[i:i+n]
+			print(' ', ','.join('%*s' % (w, v) for v in line))
+		print('};')
+	print()
+	print('(void)', expr)
+	print()
+
 def solve(data, default=0):
 	print("Unique values:", len(set(data)))
 	solutions = pack_table(data, None, default).solutions
@@ -45,15 +66,9 @@ def solve(data, default=0):
 	optimal = min(solutions, key=lambda s: s.nLookups * s.nLookups * s.fullCost)
 	compact = min(solutions, key=lambda s: s.nLookups * s.fullCost * s.fullCost)
 	print("Optimal solution:", optimal)
-	header, payload, expr = optimal.genCode('u')
-	print('\n'.join(header))
-	print('\n'.join(payload))
-	print('(void)', expr)
+	print_solution(optimal)
 	print("Compact solution:", compact)
-	header, payload, expr = compact.genCode('u')
-	print('\n'.join(header))
-	print('\n'.join(payload))
-	print('(void)', expr)
+	print_solution(compact)
 
 def main(args=sys.argv):
 

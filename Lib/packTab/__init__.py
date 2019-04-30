@@ -72,7 +72,7 @@ class AutoMapping(collections.defaultdict):
 		return v
 
 def binaryBitsFor(n):
-	"""Returns smalles power-of-two number of bits needed to represent n
+	"""Returns smallest power-of-two number of bits needed to represent n
 	different values.
 
 	>>> binaryBitsFor(1)
@@ -137,36 +137,36 @@ class BinarySolution(Solution):
 		return "%s%s" % (self.__class__.__name__,
 			(self.nLookups, self.nExtraOps, self.cost, self.bits))
 
-	def genCode(self, var, symbols=None, header=None):
+	def genCode(self, var, symbols=None, functions=None, arrays=None):
 		if symbols is None:
 			symbols = ('lookup%d'%i for i in count())
 
 		name = next(symbols)
 		typ = typeFor(self.layer.minV, self.layer.maxV)
 
-		if header is None:
-			header = collections.OrderedDict()
-		payload = []
+		if functions is None:
+			functions = collections.OrderedDict()
+		if arrays is None:
+			arrays = collections.OrderedDict()
 		expr = var
 
 		if self.nxt:
-			header, nxtPayload, nxtExpr = self.nxt.genCode("var/%s"%(1<<self.bits), symbols, header)
-
-			payload.extend(nxtPayload)
-
+			functions, arrays, nxtExpr = self.nxt.genCode("var/%s"%(1<<self.bits), symbols, functions, arrays)
 			expr = '%s[%s]+%s'%(name, nxtExpr, "(("+var+"/12)&3)")
 
 		if self.layer.unitBits == 1:
-			header['static inline bits1(const uint8_t *a, unsigned i) { return (a[i>>3] >> (i&7)) & 1; }'] = None
+			functions[('unsigned', 'bits1', 'const uint8_t *a, unsigned i')] = 'return (a[i>>3] >> (i&7)) & 1;'
 		elif self.layer.unitBits == 2:
-			header['static inline bits2(const uint8_t *a, unsigned i) { return (a[i>>2] >> (i&3)) & 3; }'] = None
+			functions[('unsigned', 'bits2', 'const uint8_t *a, unsigned i')] = 'return (a[i>>2] >> (i&3)) & 3;'
 		elif self.layer.unitBits == 4:
-			header['static inline bits4(const uint8_t *a, unsigned i) { return (a[i>>1] >> (i&1)) & 7; }'] = None
+			functions[('unsigned', 'bits4', 'const uint8_t *a, unsigned i')] = 'return (a[i>>1] >> (i&1)) & 7;'
 
-		payload.append('static const %s %s = {' % (typ, name))
-		payload.append('};')
+		arr = arrays.setdefault((typ, name), [])
+		offset = len(arr)
+		for i in range(96):
+			arr.append(i)
 
-		return header, payload, expr
+		return functions, arrays, expr
 
 class BinaryLayer:
 
