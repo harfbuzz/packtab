@@ -139,16 +139,16 @@ class BinarySolution(Solution):
 
 	def genCode(self, var, prefix='', functions=None, arrays=None):
 
-		typ = typeFor(self.layer.minV, self.layer.maxV)
-		name = prefix+'_'+typ[0]+typ[typ.index('int')+3:-2]
-		arr = arrays.setdefault((typ, name), [])
-		off = len(arr)
-
 		if functions is None:
 			functions = collections.OrderedDict()
 		if arrays is None:
 			arrays = collections.OrderedDict()
 		expr = var
+
+		typ = typeFor(self.layer.minV, self.layer.maxV)
+		name = prefix+'_'+typ[0]+typ[typ.index('int')+3:-2]
+		arr = arrays.setdefault((typ, name), [])
+		off = len(arr)
 
 		if self.nxt:
 			functions, arrays, nxtExpr = self.nxt.genCode("var/%s"%(1<<self.bits), prefix, functions, arrays)
