@@ -137,12 +137,10 @@ class BinarySolution(Solution):
 		return "%s%s" % (self.__class__.__name__,
 			(self.nLookups, self.nExtraOps, self.cost, self.bits))
 
-	def genCode(self, var, symbols=None, functions=None, arrays=None):
-		if symbols is None:
-			symbols = ('lookup%d'%i for i in count())
+	def genCode(self, var, prefix='', functions=None, arrays=None):
 
-		name = next(symbols)
 		typ = typeFor(self.layer.minV, self.layer.maxV)
+		name = prefix+'_'+typ[0]+typ[typ.index('int')+3:-2]
 
 		if functions is None:
 			functions = collections.OrderedDict()
@@ -151,15 +149,15 @@ class BinarySolution(Solution):
 		expr = var
 
 		if self.nxt:
-			functions, arrays, nxtExpr = self.nxt.genCode("var/%s"%(1<<self.bits), symbols, functions, arrays)
+			functions, arrays, nxtExpr = self.nxt.genCode("var/%s"%(1<<self.bits), prefix, functions, arrays)
 			expr = '%s[%s]+%s'%(name, nxtExpr, "(("+var+"/12)&3)")
 
 		if self.layer.unitBits == 1:
-			functions[('unsigned', 'bits1', 'const uint8_t *a, unsigned i')] = 'return (a[i>>3] >> (i&7)) & 1;'
+			functions[('unsigned', prefix+'_b1', 'const uint8_t *a, unsigned i')] = 'return (a[i>>3] >> (i&7)) & 1;'
 		elif self.layer.unitBits == 2:
-			functions[('unsigned', 'bits2', 'const uint8_t *a, unsigned i')] = 'return (a[i>>2] >> (i&3)) & 3;'
+			functions[('unsigned', prefix+'_b2', 'const uint8_t *a, unsigned i')] = 'return (a[i>>2] >> (i&3)) & 3;'
 		elif self.layer.unitBits == 4:
-			functions[('unsigned', 'bits4', 'const uint8_t *a, unsigned i')] = 'return (a[i>>1] >> (i&1)) & 7;'
+			functions[('unsigned', prefix+'_b4', 'const uint8_t *a, unsigned i')] = 'return (a[i>>1] >> (i&1)) & 7;'
 
 		arr = arrays.setdefault((typ, name), [])
 		offset = len(arr)
