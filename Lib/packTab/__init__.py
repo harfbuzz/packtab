@@ -141,6 +141,8 @@ class BinarySolution(Solution):
 
 		typ = typeFor(self.layer.minV, self.layer.maxV)
 		name = prefix+'_'+typ[0]+typ[typ.index('int')+3:-2]
+		arr = arrays.setdefault((typ, name), [])
+		off = len(arr)
 
 		if functions is None:
 			functions = collections.OrderedDict()
@@ -150,7 +152,7 @@ class BinarySolution(Solution):
 
 		if self.nxt:
 			functions, arrays, nxtExpr = self.nxt.genCode("var/%s"%(1<<self.bits), prefix, functions, arrays)
-			expr = '%s[%s]+%s'%(name, nxtExpr, "(("+var+"/12)&3)")
+			expr = '%s[%d+%s]+%s'%(name, off, nxtExpr, "(("+var+"/12)&3)")
 
 		if self.layer.unitBits == 1:
 			functions[('unsigned', prefix+'_b1', 'const uint8_t *a, unsigned i')] = 'return (a[i>>3] >> (i&7)) & 1;'
@@ -159,8 +161,6 @@ class BinarySolution(Solution):
 		elif self.layer.unitBits == 4:
 			functions[('unsigned', prefix+'_b4', 'const uint8_t *a, unsigned i')] = 'return (a[i>>1] >> (i&1)) & 7;'
 
-		arr = arrays.setdefault((typ, name), [])
-		offset = len(arr)
 		for i in range(96):
 			arr.append(i)
 
