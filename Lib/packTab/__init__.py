@@ -147,18 +147,25 @@ class BinarySolution(Solution):
 
 		typ = typeFor(self.layer.minV, self.layer.maxV)
 		name = prefix+'_'+typ[0]+typ[typ.index('int')+3:-2]
-		arr = arrays.setdefault((typ, name), [])
-		off = len(arr)
+		array = arrays.setdefault((typ, name), [])
+		start = len(array)
+		unitBits = self.layer.unitBits
+
+		shift = self.bits
+		width = 1 << shift
+		mask = width = 1
 
 		if self.next:
-			functions, arrays, nextExpr = self.next.genCode("var/%s"%(1<<self.bits), prefix, functions, arrays)
-			expr = '%s[%d+%s]+%s'%(name, off, nextExpr, "(("+var+"/12)&3)")
+			functions, arrays, expr = self.next.genCode("var>>%d" % shift, prefix, functions, arrays)
 
-		if self.layer.unitBits == 1:
+		index = '%d+%d*(%s)+(%s)&%d' % (start, width, expr, var, mask)
+		expr = '%s[%s]' % (name, index)
+
+		if unitBits == 1:
 			functions[('unsigned', prefix+'_b1', 'const uint8_t *a, unsigned i')] = 'return (a[i>>3] >> (i&7)) & 1;'
-		elif self.layer.unitBits == 2:
+		elif unitBits == 2:
 			functions[('unsigned', prefix+'_b2', 'const uint8_t *a, unsigned i')] = 'return (a[i>>2] >> (i&3)) & 3;'
-		elif self.layer.unitBits == 4:
+		elif unitBits == 4:
 			functions[('unsigned', prefix+'_b4', 'const uint8_t *a, unsigned i')] = 'return (a[i>>1] >> (i&1)) & 7;'
 
 		layers = []
@@ -178,7 +185,7 @@ class BinarySolution(Solution):
 				data.extend(_expand(d, layers, len(layers) - 1))
 
 		data = _combine(data, self.layer.unitBits)
-		arr.extend(data)
+		array.extend(data)
 
 		return functions, arrays, expr
 
