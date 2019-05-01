@@ -57,18 +57,24 @@ def print_solution(solution):
 	print('(void)', expr)
 	print()
 
+
 def solve(data, default=0):
+
 	print("Unique values:", len(set(data)))
 	solutions = pack_table(data, None, default).solutions
+
 	print("All dominant solutions: (nLookups, nExtraOps, cost, fanOut)")
 	for s in solutions:
 		print(s)
+
 	optimal = min(solutions, key=lambda s: s.nLookups * s.nLookups * s.fullCost)
-	compact = min(solutions, key=lambda s: s.nLookups * s.fullCost * s.fullCost)
 	print("Optimal solution:", optimal)
-	print_solution(optimal)
+	#print_solution(optimal)
+
+	compact = min(solutions, key=lambda s: s.nLookups * s.fullCost * s.fullCost)
 	print("Compact solution:", compact)
 	print_solution(compact)
+
 
 def main(args=sys.argv):
 

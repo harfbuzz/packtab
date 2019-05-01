@@ -98,9 +98,9 @@ lookupOps = 4
 subByteAccessOps = 4
 
 class Solution:
-	def __init__(self, layer, nxt, nLookups, nExtraOps, cost):
+	def __init__(self, layer, next, nLookups, nExtraOps, cost):
 		self.layer = layer
-		self.nxt = nxt
+		self.next = next
 		self.nLookups = nLookups
 		self.nExtraOps = nExtraOps
 		self.cost = cost
@@ -129,8 +129,8 @@ def typeFor(minV, maxV):
 
 class BinarySolution(Solution):
 
-	def __init__(self, layer, nxt, nLookups, nExtraOps, cost, bits=0):
-		Solution.__init__(self, layer, nxt, nLookups, nExtraOps, cost)
+	def __init__(self, layer, next, nLookups, nExtraOps, cost, bits=0):
+		Solution.__init__(self, layer, next, nLookups, nExtraOps, cost)
 		self.bits = bits
 
 	def __repr__(self):
@@ -150,9 +150,9 @@ class BinarySolution(Solution):
 		arr = arrays.setdefault((typ, name), [])
 		off = len(arr)
 
-		if self.nxt:
-			functions, arrays, nxtExpr = self.nxt.genCode("var/%s"%(1<<self.bits), prefix, functions, arrays)
-			expr = '%s[%d+%s]+%s'%(name, off, nxtExpr, "(("+var+"/12)&3)")
+		if self.next:
+			functions, arrays, nextExpr = self.next.genCode("var/%s"%(1<<self.bits), prefix, functions, arrays)
+			expr = '%s[%d+%s]+%s'%(name, off, nextExpr, "(("+var+"/12)&3)")
 
 		if self.layer.unitBits == 1:
 			functions[('unsigned', prefix+'_b1', 'const uint8_t *a, unsigned i')] = 'return (a[i>>3] >> (i&7)) & 1;'
@@ -161,10 +161,27 @@ class BinarySolution(Solution):
 		elif self.layer.unitBits == 4:
 			functions[('unsigned', prefix+'_b4', 'const uint8_t *a, unsigned i')] = 'return (a[i>>1] >> (i&1)) & 7;'
 
-		for i in range(96):
-			arr.append(i)
+		layers = []
+		layer = self.layer
+		bits = self.bits
+		while bits:
+			layers.append(layer)
+			layer = layer.next
+			bits -= 1
+		if not layers:
+			arr.extend(layer.data)
+		else:
+			assert layer.minV == 0, layer.minV
+			for d in range(layer.maxV + 1):
+				arr.extend(_expand(d, layers, len(layers) - 1))
 
 		return functions, arrays, expr
+
+def _expand(v, stack, i):
+	if i < 0: return [v]
+	v = stack[i].mapping[v]
+	i -= 1
+	return _expand(v[0], stack, i) + _expand(v[1], stack, i)
 
 class BinaryLayer:
 
@@ -196,7 +213,7 @@ class BinaryLayer:
 			self.data.append(self.default) # TODO Don't modify?
 
 		mapping = self.mapping = AutoMapping()
-		default2 = mapping[(self.default, self.default)]
+		default2 = 0#mapping[(self.default, self.default)]
 		data2 = []
 		it = iter(self.data)
 		for first in it: data2.append(mapping[(first, next(it))])
