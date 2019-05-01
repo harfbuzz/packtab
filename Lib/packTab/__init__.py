@@ -168,12 +168,17 @@ class BinarySolution(Solution):
 			layers.append(layer)
 			layer = layer.next
 			bits -= 1
+
+		data = []
 		if not layers:
-			arr.extend(layer.data)
+			data.extend(layer.data)
 		else:
 			assert layer.minV == 0, layer.minV
 			for d in range(layer.maxV + 1):
-				arr.extend(_expand(d, layers, len(layers) - 1))
+				data.extend(_expand(d, layers, len(layers) - 1))
+
+		data = _combine(data, self.layer.unitBits)
+		arr.extend(data)
 
 		return functions, arrays, expr
 
@@ -182,6 +187,20 @@ def _expand(v, stack, i):
 	v = stack[i].mapping[v]
 	i -= 1
 	return _expand(v[0], stack, i) + _expand(v[1], stack, i)
+
+def _combine(data, bits):
+	if bits <= 1: data = _combine2(data, lambda a,b: (b<<1)|a)
+	if bits <= 2: data = _combine2(data, lambda a,b: (b<<2)|a)
+	if bits <= 4: data = _combine2(data, lambda a,b: (b<<4)|a)
+	return data
+
+def _combine2(data, f):
+	data2 = []
+	it = iter(data)
+	for first in it:
+		data2.append(f(first, next(it)))
+	return data2
+
 
 class BinaryLayer:
 
@@ -214,9 +233,7 @@ class BinaryLayer:
 
 		mapping = self.mapping = AutoMapping()
 		default2 = 0#mapping[(self.default, self.default)]
-		data2 = []
-		it = iter(self.data)
-		for first in it: data2.append(mapping[(first, next(it))])
+		data2 = _combine2(self.data, lambda a,b: mapping[(a,b)])
 
 		self.next = BinaryLayer(data2, default2)
 
