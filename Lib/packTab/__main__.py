@@ -51,10 +51,11 @@ def print_solution(solution, prefix):
 			w += 1
 		for i in range(0, len(values), n):
 			line = values[i:i+n]
-			print(' ', ','.join('%*s' % (w, v) for v in line))
+			print(' ', ''.join('%*s,' % (w, v) for v in line))
 		print('};')
 	print()
-	print('(void)', expr)
+	# XXX Return type, where to deduce it from?
+	print('unsigned %s (unsigned u) { return %s; }' % (prefix, expr))
 
 
 def solve(name, data, default=0):
@@ -83,6 +84,9 @@ def solve(name, data, default=0):
 
 
 def main(args=sys.argv):
+
+	print('#include <stdint.h>')
+	print()
 
 	print('/* General_Category: */')
 	f, default = ucd.category, 'Cn'
