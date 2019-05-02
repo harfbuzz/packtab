@@ -270,7 +270,7 @@ class BinaryLayer:
 		layer = self.next
 		while layer is not None:
 
-			extraCost = ceil(layer.bandwidth * (2<<bits) * self.unitBits / 8)
+			extraCost = ceil(layer.bandwidth * (1<<bits) * self.unitBits / 8)
 
 			for s in layer.solutions:
 				nLookups = s.nLookups + 1
