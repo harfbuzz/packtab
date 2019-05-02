@@ -51,7 +51,7 @@ try:
 except ImportError:
 	from math import log
 	from functools import partial
-	log2 = lambda x: int(round(log(x, 2)))
+	log2 = lambda x: log(x, 2)
 
 if sys.version_info[0] < 3:
 	_float_ceil = ceil
@@ -91,7 +91,7 @@ def binaryBitsFor(n):
 	8
 	"""
 	if n == 1: return 0
-	return 1 << ceil(log2(log2(n)))
+	return 1 << int(ceil(log2(log2(n))))
 
 bytesPerOp = 4
 lookupOps = 4
@@ -137,7 +137,7 @@ class BinarySolution(Solution):
 		return "%s%s" % (self.__class__.__name__,
 			(self.nLookups, self.nExtraOps, self.cost, self.bits))
 
-	def genCode(self, var, prefix='', functions=None, arrays=None):
+	def genCode(self, prefix='', var='u', functions=None, arrays=None):
 
 		if functions is None:
 			functions = collections.OrderedDict()
@@ -156,14 +156,16 @@ class BinarySolution(Solution):
 		mask = width = 1
 
 		if self.next:
-			functions, arrays, expr = self.next.genCode("var>>%d" % shift, prefix, functions, arrays)
+			functions, arrays, expr = self.next.genCode(prefix,
+								    "%s>>%d" % (var, shift),
+								    functions, arrays)
 
 		index = '%d*(%s)+(%s)&%d' % (width, expr, var, mask)
 		if unitBits >= 8:
 			expr = '%s[%s+%s]' % (name, start, index)
 		else:
-			expr = '%s_b%s(%s+%s, %s)' % (prefix, unitBits, name, start, index)
-			shiftBits = log2(8 // unitBits)
+			expr = '%s_b%s(%s+%s,%s)' % (prefix, unitBits, name, start, index)
+			shiftBits = int(round(log2(8 // unitBits)))
 			mask1 = (8 // unitBits) - 1
 			mask2 = (1 << unitBits) - 1
 			functions[('unsigned', '%s_b%d' % (prefix, unitBits),

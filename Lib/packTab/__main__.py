@@ -39,7 +39,7 @@ if sys.version_info[0] < 3:
 
 def print_solution(solution):
 	print()
-	functions, arrays, expr = solution.genCode('u')
+	functions, arrays, expr = solution.genCode()
 	for (ret, name, args), body in functions.items():
 		print('static inline %s %s (%s) { %s }' % (ret, name, args, body))
 	print()
