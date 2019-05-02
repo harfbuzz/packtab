@@ -67,13 +67,15 @@ def solve(data, default=0):
 	for s in solutions:
 		print(s)
 
-	optimal = min(solutions, key=lambda s: s.nLookups * s.nLookups * s.fullCost)
+	# Optimal affords one extra lookup per each halving of storage.
+	optimal = min(solutions, key=lambda s: s.nLookups + log2(s.fullCost))
 	print("Optimal solution:", optimal)
 	#print_solution(optimal)
 
-	compact = min(solutions, key=lambda s: s.nLookups * s.fullCost * s.fullCost)
+	# Compact affords three extra lookups per each halving of storage.
+	compact = min(solutions, key=lambda s: s.nLookups/3 + log2(s.fullCost))
 	print("Compact solution:", compact)
-	print_solution(compact)
+	#print_solution(compact)
 
 
 def main(args=sys.argv):
