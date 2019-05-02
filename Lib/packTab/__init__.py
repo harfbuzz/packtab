@@ -179,22 +179,29 @@ class BinarySolution(Solution):
 
 		data = []
 		if not layers:
-			data.extend(layer.data)
+			mapping = layer.mapping
+			if isinstance(layer.data[0], int):
+				data.extend(layer.data)
+			else:
+				data.extend(mapping[d] for d in layer.data)
 		else:
 			assert layer.minV == 0, layer.minV
 			for d in range(layer.maxV + 1):
-				data.extend(_expand(d, layers, len(layers) - 1))
+				_expand(d, layers, len(layers) - 1, data)
 
 		data = _combine(data, self.layer.unitBits)
 		array.extend(data)
 
 		return functions, arrays, expr
 
-def _expand(v, stack, i):
-	if i < 0: return [v]
+def _expand(v, stack, i, out):
+	if i < 0:
+		out.append(v)
+		return
 	v = stack[i].mapping[v]
 	i -= 1
-	return _expand(v[0], stack, i) + _expand(v[1], stack, i)
+	_expand(v[0], stack, i, out)
+	_expand(v[1], stack, i, out)
 
 def _combine(data, bits):
 	if bits <= 1: data = _combine2(data, lambda a,b: (b<<1)|a)
