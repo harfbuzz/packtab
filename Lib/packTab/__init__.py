@@ -51,7 +51,7 @@ try:
 except ImportError:
 	from math import log
 	from functools import partial
-	log2 = lambda x: log(x, 2)
+	log2 = lambda x: int(round(log(x, 2)))
 
 if sys.version_info[0] < 3:
 	_float_ceil = ceil
@@ -158,15 +158,16 @@ class BinarySolution(Solution):
 		if self.next:
 			functions, arrays, expr = self.next.genCode("var>>%d" % shift, prefix, functions, arrays)
 
-		index = '%d+%d*(%s)+(%s)&%d' % (start, width, expr, var, mask)
-		expr = '%s[%s]' % (name, index)
-
-		if unitBits == 1:
-			functions[('unsigned', prefix+'_b1', 'const uint8_t *a, unsigned i')] = 'return (a[i>>3] >> (i&7)) & 1;'
-		elif unitBits == 2:
-			functions[('unsigned', prefix+'_b2', 'const uint8_t *a, unsigned i')] = 'return (a[i>>2] >> (i&3)) & 3;'
-		elif unitBits == 4:
-			functions[('unsigned', prefix+'_b4', 'const uint8_t *a, unsigned i')] = 'return (a[i>>1] >> (i&1)) & 7;'
+		index = '%d*(%s)+(%s)&%d' % (width, expr, var, mask)
+		if unitBits >= 8:
+			expr = '%s[%s+%s]' % (name, start, index)
+		else:
+			expr = '%s_b%s(%s+%s, %s)' % (prefix, unitBits, name, start, index)
+			shiftBits = log2(8 // unitBits)
+			mask1 = (8 // unitBits) - 1
+			mask2 = (1 << unitBits) - 1
+			functions[('unsigned', '%s_b%d' % (prefix, unitBits),
+				  'const uint8_t *a, unsigned i')] = 'return (a[i>>%s]>>(i&%s))&%s;' % (shiftBits, mask1, mask2)
 
 		layers = []
 		layer = self.layer
