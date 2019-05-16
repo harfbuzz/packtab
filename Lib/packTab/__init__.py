@@ -47,331 +47,331 @@ import collections
 from math import ceil
 from itertools import count
 try:
-	from math import log2
+    from math import log2
 except ImportError:
-	from math import log
-	from functools import partial
-	log2 = lambda x: log(x, 2)
+    from math import log
+    from functools import partial
+    log2 = lambda x: log(x, 2)
 
 if sys.version_info[0] < 3:
-	_float_ceil = ceil
-	ceil = lambda x: int(_float_ceil(x))
+    _float_ceil = ceil
+    ceil = lambda x: int(_float_ceil(x))
 
 
 __all__ = ['pack_table']
 
 
 class AutoMapping(collections.defaultdict):
-	_next = 0
-	def __missing__(self, key):
-		assert not isinstance(key, int)
-		v = self._next
-		self._next = self._next + 1
-		self[key] = v
-		self[v] = key
-		return v
+    _next = 0
+    def __missing__(self, key):
+        assert not isinstance(key, int)
+        v = self._next
+        self._next = self._next + 1
+        self[key] = v
+        self[v] = key
+        return v
 
 def binaryBitsFor(n):
-	"""Returns smallest power-of-two number of bits needed to represent n
-	different values.
+    """Returns smallest power-of-two number of bits needed to represent n
+    different values.
 
-	>>> binaryBitsFor(1)
-	0
-	>>> binaryBitsFor(2)
-	1
-	>>> binaryBitsFor(7)
-	4
-	>>> binaryBitsFor(15)
-	4
-	>>> binaryBitsFor(16)
-	4
-	>>> binaryBitsFor(17)
-	8
-	>>> binaryBitsFor(100)
-	8
-	"""
-	if n == 1: return 0
-	return 1 << int(ceil(log2(log2(n))))
+    >>> binaryBitsFor(1)
+    0
+    >>> binaryBitsFor(2)
+    1
+    >>> binaryBitsFor(7)
+    4
+    >>> binaryBitsFor(15)
+    4
+    >>> binaryBitsFor(16)
+    4
+    >>> binaryBitsFor(17)
+    8
+    >>> binaryBitsFor(100)
+    8
+    """
+    if n == 1: return 0
+    return 1 << int(ceil(log2(log2(n))))
 
 bytesPerOp = 4
 lookupOps = 4
 subByteAccessOps = 4
 
 class Solution:
-	def __init__(self, layer, next, nLookups, nExtraOps, cost):
-		self.layer = layer
-		self.next = next
-		self.nLookups = nLookups
-		self.nExtraOps = nExtraOps
-		self.cost = cost
+    def __init__(self, layer, next, nLookups, nExtraOps, cost):
+        self.layer = layer
+        self.next = next
+        self.nLookups = nLookups
+        self.nExtraOps = nExtraOps
+        self.cost = cost
 
-	@property
-	def fullCost(self):
-		return self.cost + (self.nLookups * lookupOps + self.nExtraOps) * bytesPerOp
+    @property
+    def fullCost(self):
+        return self.cost + (self.nLookups * lookupOps + self.nExtraOps) * bytesPerOp
 
-	def __repr__(self):
-		return "%s%s" % (self.__class__.__name__,
-			(self.nLookups, self.nExtraOps, self.cost))
+    def __repr__(self):
+        return "%s%s" % (self.__class__.__name__,
+               (self.nLookups, self.nExtraOps, self.cost))
 
 def typeFor(minV, maxV):
 
-	if 0 <= minV and maxV <= 255: return 'uint8_t'
-	if -128 <= minV and maxV <= 127: return 'int8_t'
+    if 0 <= minV and maxV <= 255: return 'uint8_t'
+    if -128 <= minV and maxV <= 127: return 'int8_t'
 
-	if 0 <= minV and maxV <= 65535: return 'uint16_t'
-	if -32768 <= minV and maxV <= 32767: return 'int16_t'
+    if 0 <= minV and maxV <= 65535: return 'uint16_t'
+    if -32768 <= minV and maxV <= 32767: return 'int16_t'
 
-	if 0 <= minV and maxV <= 4294967295: return 'uint32_t'
-	if -2147483648 <= minV and maxV <= 2147483647: return 'int32_t'
+    if 0 <= minV and maxV <= 4294967295: return 'uint32_t'
+    if -2147483648 <= minV and maxV <= 2147483647: return 'int32_t'
 
-	if 0 <= minV: return 'uint64_t'
-	return 'int64_t'
+    if 0 <= minV: return 'uint64_t'
+    return 'int64_t'
 
 class BinarySolution(Solution):
 
-	def __init__(self, layer, next, nLookups, nExtraOps, cost, bits=0):
-		Solution.__init__(self, layer, next, nLookups, nExtraOps, cost)
-		self.bits = bits
+    def __init__(self, layer, next, nLookups, nExtraOps, cost, bits=0):
+        Solution.__init__(self, layer, next, nLookups, nExtraOps, cost)
+        self.bits = bits
 
-	def __repr__(self):
-		return "%s%s" % (self.__class__.__name__,
-			(self.nLookups, self.nExtraOps, self.cost, self.bits))
+    def __repr__(self):
+        return "%s%s" % (self.__class__.__name__,
+               (self.nLookups, self.nExtraOps, self.cost, self.bits))
 
-	def genCode(self, prefix='', var='u', functions=None, arrays=None):
+    def genCode(self, prefix='', var='u', functions=None, arrays=None):
 
-		if functions is None:
-			functions = collections.OrderedDict()
-		if arrays is None:
-			arrays = collections.OrderedDict()
-		expr = var
+        if functions is None:
+            functions = collections.OrderedDict()
+        if arrays is None:
+            arrays = collections.OrderedDict()
+        expr = var
 
-		typ = typeFor(self.layer.minV, self.layer.maxV)
-		name = prefix+'_'+typ[0]+typ[typ.index('int')+3:-2]
-		array = arrays.setdefault((typ, name), [])
-		start = len(array)
-		unitBits = self.layer.unitBits
+        typ = typeFor(self.layer.minV, self.layer.maxV)
+        name = prefix+'_'+typ[0]+typ[typ.index('int')+3:-2]
+        array = arrays.setdefault((typ, name), [])
+        start = len(array)
+        unitBits = self.layer.unitBits
 
-		shift = self.bits
-		width = 1 << shift
-		mask = width = 1
+        shift = self.bits
+        width = 1 << shift
+        mask = width = 1
 
-		if self.next:
-			functions, arrays, expr = self.next.genCode(prefix,
-								    "%s>>%d" % (var, shift),
-								    functions, arrays)
+        if self.next:
+            functions, arrays, expr = self.next.genCode(prefix,
+                                    "%s>>%d" % (var, shift),
+                                    functions, arrays)
 
-		index = '%d*(%s)+(%s)&%d' % (width, expr, var, mask)
-		if unitBits >= 8:
-			expr = '%s[%s+%s]' % (name, start, index)
-		else:
-			expr = '%s_b%s(%s+%s,%s)' % (prefix, unitBits, name, start, index)
-			shiftBits = int(round(log2(8 // unitBits)))
-			mask1 = (8 // unitBits) - 1
-			mask2 = (1 << unitBits) - 1
-			functions[('unsigned', '%s_b%d' % (prefix, unitBits),
-				  'const uint8_t *a, unsigned i')] = 'return (a[i>>%s]>>(i&%s))&%s;' % (shiftBits, mask1, mask2)
+        index = '%d*(%s)+(%s)&%d' % (width, expr, var, mask)
+        if unitBits >= 8:
+            expr = '%s[%s+%s]' % (name, start, index)
+        else:
+            expr = '%s_b%s(%s+%s,%s)' % (prefix, unitBits, name, start, index)
+            shiftBits = int(round(log2(8 // unitBits)))
+            mask1 = (8 // unitBits) - 1
+            mask2 = (1 << unitBits) - 1
+            functions[('unsigned', '%s_b%d' % (prefix, unitBits),
+                  'const uint8_t *a, unsigned i')] = 'return (a[i>>%s]>>(i&%s))&%s;' % (shiftBits, mask1, mask2)
 
-		layers = []
-		layer = self.layer
-		bits = self.bits
-		while bits:
-			layers.append(layer)
-			layer = layer.next
-			bits -= 1
+        layers = []
+        layer = self.layer
+        bits = self.bits
+        while bits:
+            layers.append(layer)
+            layer = layer.next
+            bits -= 1
 
-		data = []
-		if not layers:
-			mapping = layer.mapping
-			if isinstance(layer.data[0], int):
-				data.extend(layer.data)
-			else:
-				data.extend(mapping[d] for d in layer.data)
-		else:
-			assert layer.minV == 0, layer.minV
-			for d in range(layer.maxV + 1):
-				_expand(d, layers, len(layers) - 1, data)
+        data = []
+        if not layers:
+            mapping = layer.mapping
+            if isinstance(layer.data[0], int):
+                data.extend(layer.data)
+            else:
+                data.extend(mapping[d] for d in layer.data)
+        else:
+            assert layer.minV == 0, layer.minV
+            for d in range(layer.maxV + 1):
+                _expand(d, layers, len(layers) - 1, data)
 
-		data = _combine(data, self.layer.unitBits)
-		array.extend(data)
+        data = _combine(data, self.layer.unitBits)
+        array.extend(data)
 
-		return functions, arrays, expr
+        return functions, arrays, expr
 
 def _expand(v, stack, i, out):
-	if i < 0:
-		out.append(v)
-		return
-	v = stack[i].mapping[v]
-	i -= 1
-	_expand(v[0], stack, i, out)
-	_expand(v[1], stack, i, out)
+    if i < 0:
+        out.append(v)
+        return
+    v = stack[i].mapping[v]
+    i -= 1
+    _expand(v[0], stack, i, out)
+    _expand(v[1], stack, i, out)
 
 def _combine(data, bits):
-	if bits <= 1: data = _combine2(data, lambda a,b: (b<<1)|a)
-	if bits <= 2: data = _combine2(data, lambda a,b: (b<<2)|a)
-	if bits <= 4: data = _combine2(data, lambda a,b: (b<<4)|a)
-	return data
+    if bits <= 1: data = _combine2(data, lambda a,b: (b<<1)|a)
+    if bits <= 2: data = _combine2(data, lambda a,b: (b<<2)|a)
+    if bits <= 4: data = _combine2(data, lambda a,b: (b<<4)|a)
+    return data
 
 def _combine2(data, f):
-	data2 = []
-	it = iter(data)
-	for first in it:
-		data2.append(f(first, next(it)))
-	return data2
+    data2 = []
+    it = iter(data)
+    for first in it:
+        data2.append(f(first, next(it)))
+    return data2
 
 
 class BinaryLayer:
 
-	"""
-	A layer that can reproduce @data passed to its constructor, by
-	using multiple lookup tables that split the domain by powers
-	of two.
-	"""
+    """
+    A layer that can reproduce @data passed to its constructor, by
+    using multiple lookup tables that split the domain by powers
+    of two.
+    """
 
-	def __init__(self, data, default):
-		self.data = data
-		self.default = default
-		self.next = None
-		self.solutions = []
+    def __init__(self, data, default):
+        self.data = data
+        self.default = default
+        self.next = None
+        self.solutions = []
 
-		self.minV, self.maxV = min(data), max(data)
-		self.bandwidth = self.maxV - self.minV + 1
-		self.unitBits = binaryBitsFor(self.bandwidth)
-		self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
-		self.bytes = ceil(self.unitBits * len(self.data) / 8)
+        self.minV, self.maxV = min(data), max(data)
+        self.bandwidth = self.maxV - self.minV + 1
+        self.unitBits = binaryBitsFor(self.bandwidth)
+        self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
+        self.bytes = ceil(self.unitBits * len(self.data) / 8)
 
-		if len(data) == 1 or self.bandwidth == 1:
-			return
+        if len(data) == 1 or self.bandwidth == 1:
+            return
 
-		self.split()
+        self.split()
 
-	def split(self):
-		if len(self.data) & 1:
-			self.data.append(self.default) # TODO Don't modify?
+    def split(self):
+        if len(self.data) & 1:
+            self.data.append(self.default) # TODO Don't modify?
 
-		mapping = self.mapping = AutoMapping()
-		default2 = 0#mapping[(self.default, self.default)]
-		data2 = _combine2(self.data, lambda a,b: mapping[(a,b)])
+        mapping = self.mapping = AutoMapping()
+        default2 = 0#mapping[(self.default, self.default)]
+        data2 = _combine2(self.data, lambda a,b: mapping[(a,b)])
 
-		self.next = BinaryLayer(data2, default2)
+        self.next = BinaryLayer(data2, default2)
 
-	def solve(self):
+    def solve(self):
 
-		solution = BinarySolution(self,
-					  None,
-					  1 if self.bandwidth > 1 else 0,
-					  self.extraOps,
-					  self.bytes)
-		self.solutions.append(solution)
-		if self.next is None:
-			return
-		self.next.solve()
+        solution = BinarySolution(self,
+                      None,
+                      1 if self.bandwidth > 1 else 0,
+                      self.extraOps,
+                      self.bytes)
+        self.solutions.append(solution)
+        if self.next is None:
+            return
+        self.next.solve()
 
-		bits = 1
-		layer = self.next
-		while layer is not None:
+        bits = 1
+        layer = self.next
+        while layer is not None:
 
-			extraCost = ceil(layer.bandwidth * (1<<bits) * self.unitBits / 8)
+            extraCost = ceil(layer.bandwidth * (1<<bits) * self.unitBits / 8)
 
-			for s in layer.solutions:
-				nLookups = s.nLookups + 1
-				nExtraOps = s.nExtraOps + self.extraOps
-				cost = s.cost + extraCost
-				solution = BinarySolution(self, s, nLookups, nExtraOps, cost, bits)
-				self.solutions.append(solution)
+            for s in layer.solutions:
+                nLookups = s.nLookups + 1
+                nExtraOps = s.nExtraOps + self.extraOps
+                cost = s.cost + extraCost
+                solution = BinarySolution(self, s, nLookups, nExtraOps, cost, bits)
+                self.solutions.append(solution)
 
-			layer = layer.next
-			bits += 1
+            layer = layer.next
+            bits += 1
 
-		self.prune_solutions()
+        self.prune_solutions()
 
-	def prune_solutions(self):
-		"""Remove dominated solutions."""
+    def prune_solutions(self):
+        """Remove dominated solutions."""
 
-		# Doing it the slowest, O(N^2), way for now.
-		sols = self.solutions
-		for a in sols:
-			if a.cost == None: continue
-			for b in sols:
-				if a is b: continue
-				if b.cost == None: continue
+        # Doing it the slowest, O(N^2), way for now.
+        sols = self.solutions
+        for a in sols:
+            if a.cost == None: continue
+            for b in sols:
+                if a is b: continue
+                if b.cost == None: continue
 
-				# Rules of dominance: a being not worse than b
-				if a.nLookups <= b.nLookups and a.fullCost <= b.fullCost:
-					b.cost = None
-					continue
+                # Rules of dominance: a being not worse than b
+                if a.nLookups <= b.nLookups and a.fullCost <= b.fullCost:
+                    b.cost = None
+                    continue
 
-		self.solutions = [s for s in self.solutions if s.cost is not None]
-		self.solutions.sort(key=lambda s: s.nLookups)
+        self.solutions = [s for s in self.solutions if s.cost is not None]
+        self.solutions.sort(key=lambda s: s.nLookups)
 
 def solve(data, default):
 
-	layer = BinaryLayer(data, default)
-	layer.solve()
-	return layer
+    layer = BinaryLayer(data, default)
+    layer.solve()
+    return layer
 
 
 # Public API
 def pack_table(data, mapping=None, default=0):
-	"""
+    """
 
-	@data is either a dictionary mapping integer keys to values, of an
-	iterable containing values for keys starting at zero.  Values must
-	all be integers, or all strings.
+    @data is either a dictionary mapping integer keys to values, of an
+    iterable containing values for keys starting at zero.  Values must
+    all be integers, or all strings.
 
-	@mapping, if set, should be either a mapping from integer keys to
-	string values, or vice versa.  Either way, it's first augmented by its
-	own inverse.  After that it's used to map any value in @data that is
-	not an integer, to obtain its integer value used for packing size
-	considerations.  When generating output table, integer values are tried
-	mapped through mapping to obtain string mnemonic to write out.  If such
-	mapping does not exist, the integer value will be written out.
+    @mapping, if set, should be either a mapping from integer keys to
+    string values, or vice versa.  Either way, it's first augmented by its
+    own inverse.  After that it's used to map any value in @data that is
+    not an integer, to obtain its integer value used for packing size
+    considerations.  When generating output table, integer values are tried
+    mapped through mapping to obtain string mnemonic to write out.  If such
+    mapping does not exist, the integer value will be written out.
 
-	If mapping is not set, it will be automatically populated to assign
-	increasing integers starting from zero, to every new string key in
-	@data.  This internal mapping only affects value size assumptions, but
-	will not otherwise be visible in the output.
+    If mapping is not set, it will be automatically populated to assign
+    increasing integers starting from zero, to every new string key in
+    @data.  This internal mapping only affects value size assumptions, but
+    will not otherwise be visible in the output.
 
-	@default is value to be used for keys not specified in @data.  Defaults
-	to zero.  If data values are strings and @mapping is not provided, then
-	@default must be specified, or bad things might happen.
+    @default is value to be used for keys not specified in @data.  Defaults
+    to zero.  If data values are strings and @mapping is not provided, then
+    @default must be specified, or bad things might happen.
 
-	"""
+    """
 
-	# Set up mapping.  See docstring.
-	if mapping is not None:
-		assert (all(isinstance(k, int) and not isinstance(v, int) for k,v in mapping.items()) or
-			all(not isinstance(k, int) and isinstance(v, int) for k,v in mapping.items()))
-		mapping2 = mapping.copy()
-		for k,v in mapping.items():
-			mapping2[v] = k
-		mapping = mapping2
-		del mapping2
-	else:
-		mapping = AutoMapping()
+    # Set up mapping.  See docstring.
+    if mapping is not None:
+        assert (all(isinstance(k, int) and not isinstance(v, int) for k,v in mapping.items()) or
+            all(not isinstance(k, int) and isinstance(v, int) for k,v in mapping.items()))
+        mapping2 = mapping.copy()
+        for k,v in mapping.items():
+            mapping2[v] = k
+        mapping = mapping2
+        del mapping2
+    else:
+        mapping = AutoMapping()
 
-	# Set up data as a list.
-	if isinstance(data, dict):
-		assert(all(isinstance(k, int) for k,v in data.items()))
-		minK = min(data.keys())
-		maxK = max(data.keys())
-		assert minK >= 0
-		data2 = [default] * (maxK + 1)
-		for k,v in data.items():
-			data2[k] = v
-		data = data2
-		del data2
+    # Set up data as a list.
+    if isinstance(data, dict):
+        assert(all(isinstance(k, int) for k,v in data.items()))
+        minK = min(data.keys())
+        maxK = max(data.keys())
+        assert minK >= 0
+        data2 = [default] * (maxK + 1)
+        for k,v in data.items():
+            data2[k] = v
+        data = data2
+        del data2
 
-	# Convert all to integers
-	assert (all(isinstance(v, int) for v in data) or
-		all(not isinstance(v, int) for v in data))
-	if not isinstance(data[0], int):
-		data = [mapping[v] for v in data]
-	if not isinstance(default, int):
-		default = mapping[default]
+    # Convert all to integers
+    assert (all(isinstance(v, int) for v in data) or
+        all(not isinstance(v, int) for v in data))
+    if not isinstance(data[0], int):
+        data = [mapping[v] for v in data]
+    if not isinstance(default, int):
+        default = mapping[default]
 
-	return solve(data, default)
+    return solve(data, default)
 
 
 if __name__ == "__main__":
-	import doctest
-	sys.exit(doctest.testmod().failed)
+    import doctest
+    sys.exit(doctest.testmod().failed)
