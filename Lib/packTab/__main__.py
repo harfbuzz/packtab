@@ -54,8 +54,7 @@ def print_solution(solution, prefix):
             print(' ', ''.join('%*s,' % (w, v) for v in line))
         print('};')
     print()
-    # XXX Return type, where to deduce it from?
-    print('unsigned %s (unsigned u) { return %s; }' % (prefix, expr))
+    print('%s %s (unsigned u) { return %s; }' % (expr[0], prefix, expr[1]))
 
 
 def solve(name, data, default=0):

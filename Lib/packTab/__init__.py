@@ -127,6 +127,9 @@ def typeFor(minV, maxV):
     if 0 <= minV: return 'uint64_t'
     return 'int64_t'
 
+def fastType(typ):
+    return typ.replace('int', 'int_fast')
+
 class BinarySolution(Solution):
 
     def __init__(self, layer, next, nLookups, nExtraOps, cost, bits=0):
@@ -156,7 +159,7 @@ class BinarySolution(Solution):
         mask = width = 1
 
         if self.next:
-            functions, arrays, expr = self.next.genCode(prefix,
+            functions, arrays, (_,expr) = self.next.genCode(prefix,
                                     "%s>>%d" % (var, shift),
                                     functions, arrays)
 
@@ -169,7 +172,7 @@ class BinarySolution(Solution):
             mask1 = (8 // unitBits) - 1
             mask2 = (1 << unitBits) - 1
             functions[('unsigned', '%s_b%d' % (prefix, unitBits),
-                  'const uint8_t *a, unsigned i')] = 'return (a[i>>%s]>>(i&%s))&%s;' % (shiftBits, mask1, mask2)
+                       'const uint8_t *a, unsigned i')] = 'return (a[i>>%s]>>(i&%s))&%s;' % (shiftBits, mask1, mask2)
 
         layers = []
         layer = self.layer
@@ -194,7 +197,7 @@ class BinarySolution(Solution):
         data = _combine(data, self.layer.unitBits)
         array.extend(data)
 
-        return functions, arrays, expr
+        return functions, arrays, (fastType(typ), expr)
 
 def _expand(v, stack, i, out):
     if i < 0:
