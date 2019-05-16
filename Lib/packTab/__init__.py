@@ -130,6 +130,7 @@ def typeFor(minV, maxV):
 def fastType(typ):
     return typ.replace('int', 'int_fast')
 
+
 class BinarySolution(Solution):
 
     def __init__(self, layer, next, nLookups, nExtraOps, cost, bits=0):
@@ -150,9 +151,13 @@ class BinarySolution(Solution):
 
         typ = typeFor(self.layer.minV, self.layer.maxV)
         name = prefix+'_'+typ[0]+typ[typ.index('int')+3:-2]
+        unitBits = self.layer.unitBits
+        if not unitBits:
+            expr = self.layer.data[0]
+            return functions, arrays, (fastType(typ), expr)
+
         array = arrays.setdefault((typ, name), [])
         start = len(array)
-        unitBits = self.layer.unitBits
 
         shift = self.bits
         width = 1 << shift
@@ -185,6 +190,7 @@ class BinarySolution(Solution):
         data = []
         if not layers:
             mapping = layer.mapping
+            # TODO Following is always true.
             if isinstance(layer.data[0], int):
                 data.extend(layer.data)
             else:
@@ -218,7 +224,10 @@ def _combine2(data, f):
     data2 = []
     it = iter(data)
     for first in it:
-        data2.append(f(first, next(it)))
+        try:
+            data2.append(f(first, next(it)))
+        except StopIteration:
+            data2.append(f(first, 0))
     return data2
 
 

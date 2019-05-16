@@ -114,6 +114,8 @@ def main(args=sys.argv):
     mirrored_gcs = [gc for m,gc in zip(mirrored_data, gc_data) if m]
     print('/* GC of all mirrored characters: %s */' % set(mirrored_gcs))
 
+    solve('trivial', [1, 1, 2, 1], 0)
+
     return 0
 
 if __name__ == "__main__":
