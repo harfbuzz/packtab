@@ -58,7 +58,7 @@ if sys.version_info[0] < 3:
     ceil = lambda x: int(_float_ceil(x))
 
 
-__all__ = ['pack_table']
+__all__ = ['pack_table', 'pick_solution']
 
 
 class AutoMapping(collections.defaultdict):
@@ -314,7 +314,8 @@ def solve(data, default):
 
 
 # Public API
-def pack_table(data, mapping=None, default=0):
+
+def pack_table(data, mapping=None, default=0, compression=1):
     """
 
     @data is either a dictionary mapping integer keys to values, of an
@@ -372,7 +373,16 @@ def pack_table(data, mapping=None, default=0):
     if not isinstance(default, int):
         default = mapping[default]
 
-    return solve(data, default)
+    solutions = solve(data, default).solutions
+
+    if compression is None:
+        solutions.sort(key=lambda s: -s.fullCost)
+        return solutions
+
+    return pick_solution(solutions, compression)
+
+def pick_solution(solutions, compression=1):
+    return min(solutions, key=lambda s: s.nLookups + compression*log2(s.fullCost))
 
 
 if __name__ == "__main__":

@@ -60,23 +60,23 @@ def print_solution(solution, prefix):
 def solve(name, data, default=0):
 
     print('/* Dataset: %s. Unique values: %d */' % (name, len(set(data))))
-    solutions = pack_table(data, None, default).solutions
+    solutions = pack_table(data, None, default, None)
     print()
 
-    print('/* All dominant solutions: (nLookups, nExtraOps, cost, fanOut)')
+    print('/* All dominant solutions: (nLookups, nExtraOps, cost, bits): fullCost')
     for s in solutions:
-        print(' *', s)
+        print(' *', s, s.fullCost)
     print(' */')
     print()
 
     # Optimal affords one extra lookup per each halving of storage.
-    optimal = min(solutions, key=lambda s: s.nLookups + log2(s.fullCost))
+    optimal = pick_solution (solutions)
     print('/* Optimal solution: %s */' % optimal)
     print_solution(optimal, name+'_o')
     print()
 
     # Compact affords three extra lookups per each halving of storage.
-    compact = min(solutions, key=lambda s: s.nLookups/3 + log2(s.fullCost))
+    compact = pick_solution (solutions, 3)
     print('/* Compact solution: %s */' % compact)
     print_solution(compact, name+'_c')
     print()
