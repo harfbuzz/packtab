@@ -400,6 +400,11 @@ class OuterSolution(Solution):
         if self.layer.bias != 0:
             expr = '%d+%s' % (self.layer.bias, expr)
 
+        expr = '%s<%d?%s:%s' % (var,
+                                len(self.layer.data),
+                                expr,
+                                self.layer.default) # TODO Map default?
+
         return functions, arrays, (fastType(typ), expr)
 
 def gcd(lst):
@@ -436,6 +441,8 @@ class OuterLayer(Layer):
 
     def __init__(self, data, default):
         data = list(data)
+        while data[-1] == default:
+            data.pop()
         Layer.__init__(self, data, default)
 
         self.minV, self.maxV = min(data), max(data)
