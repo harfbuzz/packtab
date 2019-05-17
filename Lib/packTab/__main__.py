@@ -39,11 +39,12 @@ if sys.version_info[0] < 3:
 
 def print_solution(solution, prefix):
     print()
-    functions, arrays, expr = solution.genCode(prefix)
-    for (ret, name, args), body in functions.items():
+    code = Code()
+    expr = solution.genCode(code, prefix)
+    for (ret, name, args), body in code.functions.items():
         print('static inline %s %s (%s) {\n  return %s;\n}' % (ret, name, args, body))
     print()
-    for (elt, name), values in arrays.items():
+    for (elt, name), values in code.arrays.items():
         print('static const %s %s[%s] = {' % (elt, name, len(values)))
         w = max(len(str(v)) for v in values)
         n = 1 << int(log2(78 / (w + 1)))

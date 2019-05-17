@@ -70,7 +70,7 @@ if sys.version_info[0] < 3:
     ceil = lambda x: int(_float_ceil(x))
 
 
-__all__ = ['pack_table', 'pick_solution']
+__all__ = ['Code', 'pack_table', 'pick_solution']
 
 
 class AutoMapping(collections.defaultdict):
@@ -104,6 +104,12 @@ def binaryBitsFor(n):
     """
     if n == 1: return 0
     return 1 << int(ceil(log2(log2(n))))
+
+
+class Code:
+    def __init__(self):
+        self.functions = collections.OrderedDict()
+        self.arrays = collections.OrderedDict()
 
 bytesPerOp = 4
 lookupOps = 4
@@ -179,12 +185,7 @@ class InnerSolution(Solution):
         return "%s%s" % (self.__class__.__name__,
                (self.nLookups, self.nExtraOps, self.cost, self.bits))
 
-    def genCode(self, prefix='', var='u', functions=None, arrays=None):
-
-        if functions is None:
-            functions = collections.OrderedDict()
-        if arrays is None:
-            arrays = collections.OrderedDict()
+    def genCode(self, code, prefix='', var='u'):
         expr = var
 
         typ = typeFor(self.layer.minV, self.layer.maxV)
@@ -192,9 +193,9 @@ class InnerSolution(Solution):
         unitBits = self.layer.unitBits
         if not unitBits:
             expr = self.layer.data[0]
-            return functions, arrays, (fastType(typ), expr)
+            return (fastType(typ), expr)
 
-        array = arrays.setdefault((typ, arrName), [])
+        array = code.arrays.setdefault((typ, arrName), [])
         start = len(array)
 
         shift = self.bits
@@ -202,9 +203,7 @@ class InnerSolution(Solution):
         mask = width - 1
 
         if self.next:
-            functions, arrays, (_,expr) = self.next.genCode(prefix,
-                                                            "%s>>%d" % (var, shift),
-                                                            functions, arrays)
+            (_,expr) = self.next.genCode(code, prefix, "%s>>%d" % (var, shift))
 
         start = str(start)+'+' if start else ''
         if expr == '0' or width == 0:
@@ -222,8 +221,8 @@ class InnerSolution(Solution):
             shiftBits = int(round(log2(8 // unitBits)))
             mask1 = (8 // unitBits) - 1
             mask2 = (1 << unitBits) - 1
-            functions[('unsigned', '%s_b%d' % (prefix, unitBits),
-                       'const uint8_t *a, unsigned i')] = '(a[i>>%s]>>(i&%s))&%s' % (shiftBits, mask1, mask2)
+            code.functions[('unsigned', '%s_b%d' % (prefix, unitBits),
+                            'const uint8_t *a, unsigned i')] = '(a[i>>%s]>>(i&%s))&%s' % (shiftBits, mask1, mask2)
 
         layers = []
         layer = self.layer
@@ -249,7 +248,7 @@ class InnerSolution(Solution):
         data = _combine(data, self.layer.unitBits)
         array.extend(data)
 
-        return functions, arrays, (fastType(typ), expr)
+        return (fastType(typ), expr)
 
 def _expand(v, stack, i, out):
     if i < 0:
@@ -375,12 +374,7 @@ class OuterSolution(Solution):
         return "%s%s" % (self.__class__.__name__,
                (self.nLookups, self.nExtraOps, self.cost))
 
-    def genCode(self, prefix='', var='u', functions=None, arrays=None):
-
-        if functions is None:
-            functions = collections.OrderedDict()
-        if arrays is None:
-            arrays = collections.OrderedDict()
+    def genCode(self, code, prefix='', var='u'):
         expr = var
 
         typ = typeFor(self.layer.minV, self.layer.maxV)
@@ -389,12 +383,10 @@ class OuterSolution(Solution):
         if not unitBits:
             assert False # Audit this branch
             expr = self.layer.data[0]
-            return functions, arrays, (fastType(typ), expr)
+            return (fastType(typ), expr)
 
         if self.next:
-            functions, arrays, (_,expr) = self.next.genCode(prefix,
-                                                            var,
-                                                            functions, arrays)
+            (_,expr) = self.next.genCode(code, prefix, var)
 
         if self.layer.mult != 1:
             expr = '%d*%s' % (self.layer.mult, expr)
@@ -406,7 +398,7 @@ class OuterSolution(Solution):
                                 expr,
                                 self.layer.default) # TODO Map default?
 
-        return functions, arrays, (fastType(typ), expr)
+        return (fastType(typ), expr)
 
 def gcd(lst):
     """
