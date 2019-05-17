@@ -290,6 +290,8 @@ class InnerLayer(Layer):
     def __init__(self, data, default):
         Layer.__init__(self, data, default)
 
+        assert self.minV == 0
+
         if self.bandwidth == 1:
             return
 
