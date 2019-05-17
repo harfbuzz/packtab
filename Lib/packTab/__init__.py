@@ -38,12 +38,15 @@
 # of data tables.
 #
 # TODO:
+# - Handle empty data array.
 # - Don't factor out bias/mult if those don't actually save any space.
 #   Not factoring them out saves ops.
 # - Bake in width multiplier into array data if doing so doesn't enlarge
 #   data type.  Again, that would save ops.
 # - If an array is not larger than 64 bits, inline it in code directly
 #   as one integer.
+# - Currently we only cull array of defaults at the end.  Do it at
+#   beginning as well, and adjust split code to find optimum shift.
 # - Byte reuse!  Much bigger work item.
 
 """
