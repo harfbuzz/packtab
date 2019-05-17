@@ -163,7 +163,7 @@ class BinarySolution(Solution):
 
         shift = self.bits
         width = 1 << shift
-        mask = width = 1
+        mask = width - 1
 
         if self.next:
             functions, arrays, (_,expr) = self.next.genCode(prefix,
