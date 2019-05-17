@@ -273,12 +273,6 @@ class Layer:
         self.next = None
         self.solutions = []
 
-        self.minV, self.maxV = min(data), max(data)
-        self.bandwidth = self.maxV - self.minV + 1
-        self.unitBits = binaryBitsFor(self.bandwidth)
-        self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
-        self.bytes = ceil(self.unitBits * len(self.data) / 8)
-
 class InnerLayer(Layer):
 
     """
@@ -289,6 +283,12 @@ class InnerLayer(Layer):
 
     def __init__(self, data, default):
         Layer.__init__(self, data, default)
+
+        self.minV, self.maxV = min(data), max(data)
+        self.bandwidth = self.maxV - self.minV + 1
+        self.unitBits = binaryBitsFor(self.bandwidth)
+        self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
+        self.bytes = ceil(self.unitBits * len(self.data) / 8)
 
         assert self.minV == 0
 
@@ -400,6 +400,13 @@ class OuterLayer(Layer):
 
     def __init__(self, data, default):
         Layer.__init__(self, data, default)
+
+        self.minV, self.maxV = min(data), max(data)
+        self.bandwidth = self.maxV - self.minV + 1
+        self.unitBits = binaryBitsFor(self.bandwidth)
+        self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
+        self.bytes = ceil(self.unitBits * len(self.data) / 8)
+
         bias = self.bias = self.minV
         data = [d - bias for d in self.data]
         if bias:
