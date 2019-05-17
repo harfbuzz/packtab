@@ -450,8 +450,9 @@ class OuterLayer(Layer):
         if mult: self.extraOps += 1
 
         data = [(d - bias) // mult for d in self.data]
+        default = (self.default - bias) // mult
 
-        self.next = InnerLayer(data, self.default)
+        self.next = InnerLayer(data, default)
 
     def solve(self):
 
