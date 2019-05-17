@@ -107,9 +107,19 @@ def binaryBitsFor(n):
 
 
 class Code:
-    def __init__(self):
+    def __init__(self, namespace=''):
+        self.namespace = namespace
         self.functions = collections.OrderedDict()
         self.arrays = collections.OrderedDict()
+
+    def addFunction(self, retType, nameHint, args, body):
+        name = '%s_%s' % (self.namespace, nameHint)
+        key = (retType, name, args)
+        if key in self.functions:
+            assert self.functions[key] == body
+        else:
+            self.functions[key] = body
+        return name
 
 bytesPerOp = 4
 lookupOps = 4
@@ -217,13 +227,16 @@ class InnerSolution(Solution):
         if unitBits >= 8:
             expr = '%s[%s%s]' % (arrName, start, index)
         else:
-            funcName = '%s_b%s' % (prefix, unitBits)
-            expr = '%s(%s%s,%s)' % (funcName, arrName, start, index)
             shiftBits = int(round(log2(8 // unitBits)))
             mask1 = (8 // unitBits) - 1
             mask2 = (1 << unitBits) - 1
-            code.functions[('unsigned', funcName,
-                            'const uint8_t *a, unsigned i')] = '(a[i>>%s]>>(i&%s))&%s' % (shiftBits, mask1, mask2)
+            funcBody = '(a[i>>%s]>>(i&%s))&%s' % (shiftBits, mask1, mask2)
+            funcName = code.addFunction ('unsigned',
+                                         'b%s' % unitBits,
+                                         (('const uint8_t*', 'a'),
+                                          ('unsigned',       'i')),
+                                         funcBody)
+            expr = '%s(%s%s,%s)' % (funcName, arrName, start, index)
 
         layers = []
         layer = self.layer
