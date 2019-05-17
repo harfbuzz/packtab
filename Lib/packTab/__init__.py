@@ -310,10 +310,10 @@ class InnerLayer(Layer):
     def solve(self):
 
         solution = InnerSolution(self,
-                      None,
-                      1 if self.bandwidth > 1 else 0,
-                      self.extraOps,
-                      self.bytes)
+                                 None,
+                                 1 if self.bandwidth > 1 else 0,
+                                 self.extraOps,
+                                 self.bytes)
         self.solutions.append(solution)
         if self.next is None:
             return
