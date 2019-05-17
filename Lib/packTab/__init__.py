@@ -217,11 +217,12 @@ class InnerSolution(Solution):
         if unitBits >= 8:
             expr = '%s[%s%s]' % (arrName, start, index)
         else:
-            expr = '%s_b%s(%s%s,%s)' % (prefix, unitBits, arrName, start, index)
+            funcName = '%s_b%s' % (prefix, unitBits)
+            expr = '%s(%s%s,%s)' % (funcName, arrName, start, index)
             shiftBits = int(round(log2(8 // unitBits)))
             mask1 = (8 // unitBits) - 1
             mask2 = (1 << unitBits) - 1
-            code.functions[('unsigned', '%s_b%d' % (prefix, unitBits),
+            code.functions[('unsigned', funcName,
                             'const uint8_t *a, unsigned i')] = '(a[i>>%s]>>(i&%s))&%s' % (shiftBits, mask1, mask2)
 
         layers = []
