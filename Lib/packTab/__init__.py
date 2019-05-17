@@ -133,7 +133,7 @@ def fastType(typ):
     return typ.replace('int', 'int_fast')
 
 
-class BinarySolution(Solution):
+class InnerSolution(Solution):
 
     def __init__(self, layer, next, nLookups, nExtraOps, cost, bits=0):
         Solution.__init__(self, layer, next, nLookups, nExtraOps, cost)
@@ -241,7 +241,7 @@ def _combine2(data, f):
     return data2
 
 
-class BinaryLayer:
+class InnerLayer:
 
     """
     A layer that can reproduce @data passed to its constructor, by
@@ -274,11 +274,11 @@ class BinaryLayer:
         default2 = 0#mapping[(self.default, self.default)]
         data2 = _combine2(self.data, lambda a,b: mapping[(a,b)])
 
-        self.next = BinaryLayer(data2, default2)
+        self.next = InnerLayer(data2, default2)
 
     def solve(self):
 
-        solution = BinarySolution(self,
+        solution = InnerSolution(self,
                       None,
                       1 if self.bandwidth > 1 else 0,
                       self.extraOps,
@@ -298,7 +298,7 @@ class BinaryLayer:
                 nLookups = s.nLookups + 1
                 nExtraOps = s.nExtraOps + self.extraOps
                 cost = s.cost + extraCost
-                solution = BinarySolution(self, s, nLookups, nExtraOps, cost, bits)
+                solution = InnerSolution(self, s, nLookups, nExtraOps, cost, bits)
                 self.solutions.append(solution)
 
             layer = layer.next
@@ -327,7 +327,7 @@ class BinaryLayer:
 
 def solve(data, default):
 
-    layer = BinaryLayer(data, default)
+    layer = InnerLayer(data, default)
     layer.solve()
     return layer
 
