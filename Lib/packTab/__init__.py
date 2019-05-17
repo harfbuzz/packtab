@@ -220,7 +220,7 @@ class InnerSolution(Solution):
             mask1 = (8 // unitBits) - 1
             mask2 = (1 << unitBits) - 1
             functions[('unsigned', '%s_b%d' % (prefix, unitBits),
-                       'const uint8_t *a, unsigned i')] = 'return (a[i>>%s]>>(i&%s))&%s;' % (shiftBits, mask1, mask2)
+                       'const uint8_t *a, unsigned i')] = '(a[i>>%s]>>(i&%s))&%s' % (shiftBits, mask1, mask2)
 
         layers = []
         layer = self.layer
