@@ -265,13 +265,7 @@ def _combine2(data, f):
     return data2
 
 
-class InnerLayer:
-
-    """
-    A layer that can reproduce @data passed to its constructor, by
-    using multiple lookup tables that split the domain by powers
-    of two.
-    """
+class Layer:
 
     def __init__(self, data, default):
         self.data = data
@@ -284,6 +278,17 @@ class InnerLayer:
         self.unitBits = binaryBitsFor(self.bandwidth)
         self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
         self.bytes = ceil(self.unitBits * len(self.data) / 8)
+
+class InnerLayer(Layer):
+
+    """
+    A layer that can reproduce @data passed to its constructor, by
+    using multiple lookup tables that split the domain by powers
+    of two.
+    """
+
+    def __init__(self, data, default):
+        Layer.__init__(self, data, default)
 
         if self.bandwidth == 1:
             return
@@ -349,9 +354,80 @@ class InnerLayer:
         self.solutions = [s for s in self.solutions if s.cost is not None]
         self.solutions.sort(key=lambda s: s.nLookups)
 
+class OuterSolution(Solution):
+
+    def __init__(self, layer, next, nLookups, nExtraOps, cost):
+        Solution.__init__(self, layer, next, nLookups, nExtraOps, cost)
+
+    def __repr__(self):
+        return "%s%s" % (self.__class__.__name__,
+               (self.nLookups, self.nExtraOps, self.cost))
+
+    def genCode(self, prefix='', var='u', functions=None, arrays=None):
+
+        if functions is None:
+            functions = collections.OrderedDict()
+        if arrays is None:
+            arrays = collections.OrderedDict()
+        expr = var
+
+        typ = typeFor(self.layer.minV, self.layer.maxV)
+        arrName = prefix+'_'+typeAbbr(typ)
+        unitBits = self.layer.unitBits
+        if not unitBits:
+            expr = self.layer.data[0]
+            return functions, arrays, (fastType(typ), expr)
+
+        if self.next:
+            functions, arrays, (_,expr) = self.next.genCode(prefix,
+                                    var,
+                                    functions, arrays)
+
+        return functions, arrays, (fastType(typ), expr)
+
+class OuterLayer(Layer):
+
+    """
+    A layer that can reproduce @data passed to its constructor, by
+    simple arithmetic tricks to reduce its size.
+    """
+
+    def __init__(self, data, default):
+        Layer.__init__(self, data, default)
+        self.next = InnerLayer(self.data, self.default)
+
+    def solve(self):
+
+        extraCost = 0 # TODO
+
+        layer = self.next
+        layer.solve()
+        for s in layer.solutions:
+            nLookups = s.nLookups
+            nExtraOps = s.nExtraOps + self.extraOps
+            cost = s.cost + extraCost
+            solution = OuterSolution(self, s, nLookups, nExtraOps, cost)
+            self.solutions.append(solution)
+
+        bits = 1
+        layer = self.next
+        while layer is not None:
+
+            extraCost = ceil(layer.bandwidth * (1<<bits) * self.unitBits / 8)
+
+            for s in layer.solutions:
+                nLookups = s.nLookups + 1
+                nExtraOps = s.nExtraOps + self.extraOps
+                cost = s.cost + extraCost
+                solution = InnerSolution(self, s, nLookups, nExtraOps, cost, bits)
+                self.solutions.append(solution)
+
+            layer = layer.next
+            bits += 1
+
 def solve(data, default):
 
-    layer = InnerLayer(data, default)
+    layer = OuterLayer(data, default)
     layer.solve()
     return layer
 
