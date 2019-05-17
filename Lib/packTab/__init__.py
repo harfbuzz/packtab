@@ -308,7 +308,7 @@ class InnerLayer(Layer):
 
     def split(self):
         if len(self.data) & 1:
-            self.data.append(self.default) # TODO Don't modify?
+            self.data.append(self.default)
 
         mapping = self.mapping = AutoMapping()
         default2 = 0#mapping[(self.default, self.default)]
@@ -435,6 +435,7 @@ class OuterLayer(Layer):
     """
 
     def __init__(self, data, default):
+        data = list(data)
         Layer.__init__(self, data, default)
 
         self.minV, self.maxV = min(data), max(data)
