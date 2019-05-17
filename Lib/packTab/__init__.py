@@ -409,22 +409,6 @@ class OuterLayer(Layer):
             solution = OuterSolution(self, s, nLookups, nExtraOps, cost)
             self.solutions.append(solution)
 
-        bits = 1
-        layer = self.next
-        while layer is not None:
-
-            extraCost = ceil(layer.bandwidth * (1<<bits) * self.unitBits / 8)
-
-            for s in layer.solutions:
-                nLookups = s.nLookups + 1
-                nExtraOps = s.nExtraOps + self.extraOps
-                cost = s.cost + extraCost
-                solution = InnerSolution(self, s, nLookups, nExtraOps, cost, bits)
-                self.solutions.append(solution)
-
-            layer = layer.next
-            bits += 1
-
 def solve(data, default):
 
     layer = OuterLayer(data, default)
