@@ -171,7 +171,12 @@ class BinarySolution(Solution):
                                     functions, arrays)
 
         start = str(start)+'+' if start else ''
-        index0 = '%d*(%s)' % (width, expr) if width > 1 else str(expr) if width == 1 else ''
+        if expr == '0' or width == 0:
+            index0 = ''
+        elif width == 1:
+            index0 = str(expr)
+        else:
+            index0 = '%d*(%s)' % (width, expr)
         index1 = '(%s)&%d' % (var, mask) if mask else ''
         index = index0 + ('+' if index0 and index1 else '') + index1
         if unitBits >= 8:
