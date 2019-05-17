@@ -124,8 +124,10 @@ def typeFor(minV, maxV):
     if 0 <= minV and maxV <= 4294967295: return 'uint32_t'
     if -2147483648 <= minV and maxV <= 2147483647: return 'int32_t'
 
-    if 0 <= minV: return 'uint64_t'
-    return 'int64_t'
+    if 0 <= minV and maxV <= 18446744073709551615: return 'uint64_t'
+    if -9223372036854775808 <= minV and maxV <= 9223372036854775807: return 'int64_t'
+
+    assert False
 
 def fastType(typ):
     return typ.replace('int', 'int_fast')
