@@ -253,7 +253,7 @@ class BinaryLayer:
         self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
         self.bytes = ceil(self.unitBits * len(self.data) / 8)
 
-        if len(data) == 1 or self.bandwidth == 1:
+        if self.bandwidth == 1:
             return
 
         self.split()
