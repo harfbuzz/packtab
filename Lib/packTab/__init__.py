@@ -191,8 +191,8 @@ class InnerSolution(Solution):
 
         if self.next:
             functions, arrays, (_,expr) = self.next.genCode(prefix,
-                                    "%s>>%d" % (var, shift),
-                                    functions, arrays)
+                                                            "%s>>%d" % (var, shift),
+                                                            functions, arrays)
 
         start = str(start)+'+' if start else ''
         if expr == '0' or width == 0:
@@ -375,13 +375,17 @@ class OuterSolution(Solution):
         arrName = prefix+'_'+typeAbbr(typ)
         unitBits = self.layer.unitBits
         if not unitBits:
+            assert False # Audit this branch
             expr = self.layer.data[0]
             return functions, arrays, (fastType(typ), expr)
 
         if self.next:
             functions, arrays, (_,expr) = self.next.genCode(prefix,
-                                    var,
-                                    functions, arrays)
+                                                            var,
+                                                            functions, arrays)
+
+        if self.layer.bias:
+            expr = '%d+%s' % (self.layer.bias, expr)
 
         return functions, arrays, (fastType(typ), expr)
 
@@ -394,11 +398,15 @@ class OuterLayer(Layer):
 
     def __init__(self, data, default):
         Layer.__init__(self, data, default)
-        self.next = InnerLayer(self.data, self.default)
+        bias = self.bias = self.minV
+        data = [d - bias for d in self.data]
+        if bias:
+            self.extraOps += 1
+        self.next = InnerLayer(data, self.default)
 
     def solve(self):
 
-        extraCost = 0 # TODO
+        extraCost = 0
 
         layer = self.next
         layer.solve()
