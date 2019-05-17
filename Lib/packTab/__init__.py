@@ -129,6 +129,9 @@ def typeFor(minV, maxV):
 
     assert False
 
+def typeWidth(typ):
+    return int(typ[typ.index('int')+3:-2])
+
 def fastType(typ):
     return typ.replace('int', 'int_fast')
 
@@ -152,7 +155,7 @@ class InnerSolution(Solution):
         expr = var
 
         typ = typeFor(self.layer.minV, self.layer.maxV)
-        arrName = prefix+'_'+typ[0]+typ[typ.index('int')+3:-2]
+        arrName = prefix+'_'+typ[0]+str(typeWidth(typ))
         unitBits = self.layer.unitBits
         if not unitBits:
             expr = self.layer.data[0]
