@@ -170,11 +170,14 @@ class BinarySolution(Solution):
                                     "%s>>%d" % (var, shift),
                                     functions, arrays)
 
-        index = '%d*(%s)+(%s)&%d' % (width, expr, var, mask)
+        start = str(start)+'+' if start else ''
+        index0 = '%d*(%s)' % (width, expr) if width else ''
+        index1 = '(%s)&%d' % (var, mask) if mask else ''
+        index = index0 + ('+' if index0 and index1 else '') + index1
         if unitBits >= 8:
-            expr = '%s[%s+%s]' % (name, start, index)
+            expr = '%s[%s%s]' % (name, start, index)
         else:
-            expr = '%s_b%s(%s+%s,%s)' % (prefix, unitBits, name, start, index)
+            expr = '%s_b%s(%s%s,%s)' % (prefix, unitBits, name, start, index)
             shiftBits = int(round(log2(8 // unitBits)))
             mask1 = (8 // unitBits) - 1
             mask2 = (1 << unitBits) - 1
