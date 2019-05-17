@@ -386,10 +386,37 @@ class OuterSolution(Solution):
                                                             var,
                                                             functions, arrays)
 
-        if self.layer.bias:
+        if self.layer.mult != 1:
+            expr = '%d*%s' % (self.layer.mult, expr)
+        if self.layer.bias != 0:
             expr = '%d+%s' % (self.layer.bias, expr)
 
         return functions, arrays, (fastType(typ), expr)
+
+def gcd(lst):
+    """
+    >>> gcd([])
+    1
+    >>> gcd([48])
+    48
+    >>> gcd([48, 60])
+    12
+    >>> gcd([48, 60, 6])
+    6
+    >>> gcd([48, 61, 6])
+    1
+    """
+    it = iter(lst)
+    try:
+        x = next(it)
+    except StopIteration:
+        return 1
+    for y in it:
+        while y:
+            x, y = y, x%y
+        if x == 1:
+            return 1
+    return x
 
 class OuterLayer(Layer):
 
@@ -408,9 +435,13 @@ class OuterLayer(Layer):
         self.bytes = ceil(self.unitBits * len(self.data) / 8)
 
         bias = self.bias = self.minV
-        data = [d - bias for d in self.data]
-        if bias:
-            self.extraOps += 1
+        if bias: self.extraOps += 1
+
+        mult = self.mult = gcd(data)
+        if mult: self.extraOps += 1
+
+        data = [(d - bias) // mult for d in self.data]
+
         self.next = InnerLayer(data, self.default)
 
     def solve(self):
