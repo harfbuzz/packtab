@@ -279,9 +279,8 @@ def _combine2(data, f):
 
 class Layer:
 
-    def __init__(self, data, default):
+    def __init__(self, data):
         self.data = data
-        self.default = default
         self.next = None
         self.solutions = []
 
@@ -293,8 +292,8 @@ class InnerLayer(Layer):
     of two.
     """
 
-    def __init__(self, data, default):
-        Layer.__init__(self, data, default)
+    def __init__(self, data):
+        Layer.__init__(self, data)
 
         self.minV, self.maxV = min(data), max(data)
         self.bandwidth = self.maxV - self.minV + 1
@@ -311,13 +310,12 @@ class InnerLayer(Layer):
 
     def split(self):
         if len(self.data) & 1:
-            self.data.append(self.default)
+            self.data.append(0)
 
         mapping = self.mapping = AutoMapping()
-        default2 = 0#mapping[(self.default, self.default)]
         data2 = _combine2(self.data, lambda a,b: mapping[(a,b)])
 
-        self.next = InnerLayer(data2, default2)
+        self.next = InnerLayer(data2)
 
     def solve(self):
 
@@ -446,7 +444,8 @@ class OuterLayer(Layer):
         data = list(data)
         while data[-1] == default:
             data.pop()
-        Layer.__init__(self, data, default)
+        Layer.__init__(self, data)
+        self.default = default
 
         self.minV, self.maxV = min(data), max(data)
         self.bandwidth = self.maxV - self.minV + 1
@@ -463,7 +462,7 @@ class OuterLayer(Layer):
         data = [(d - bias) // mult for d in self.data]
         default = (self.default - bias) // mult
 
-        self.next = InnerLayer(data, default)
+        self.next = InnerLayer(data)
 
     def solve(self):
 
