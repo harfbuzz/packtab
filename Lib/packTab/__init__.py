@@ -112,14 +112,25 @@ class Code:
         self.functions = collections.OrderedDict()
         self.arrays = collections.OrderedDict()
 
+    def nameFor(self, nameHint):
+        return '%s_%s' % (self.namespace, nameHint)
+
     def addFunction(self, retType, nameHint, args, body):
-        name = '%s_%s' % (self.namespace, nameHint)
+        name = self.nameFor(nameHint)
         key = (retType, name, args)
         if key in self.functions:
             assert self.functions[key] == body
         else:
             self.functions[key] = body
         return name
+
+    def addArray(self, typ, nameHint):
+        name = self.nameFor(nameHint)
+        key = (typ, name)
+        array = self.arrays.setdefault(key, [])
+        start = len(array)
+        return name, array, start
+
 
 bytesPerOp = 4
 lookupOps = 4
@@ -199,14 +210,12 @@ class InnerSolution(Solution):
         expr = var
 
         typ = typeFor(self.layer.minV, self.layer.maxV)
-        arrName = prefix+'_'+typeAbbr(typ)
         unitBits = self.layer.unitBits
         if not unitBits:
             expr = self.layer.data[0]
             return (fastType(typ), expr)
 
-        array = code.arrays.setdefault((typ, arrName), [])
-        start = len(array)
+        arrName, array, start = code.addArray(typ, typeAbbr(typ))
 
         shift = self.bits
         width = 1 << shift
