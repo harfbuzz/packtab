@@ -152,13 +152,13 @@ class BinarySolution(Solution):
         expr = var
 
         typ = typeFor(self.layer.minV, self.layer.maxV)
-        arrname = prefix+'_'+typ[0]+typ[typ.index('int')+3:-2]
+        arrName = prefix+'_'+typ[0]+typ[typ.index('int')+3:-2]
         unitBits = self.layer.unitBits
         if not unitBits:
             expr = self.layer.data[0]
             return functions, arrays, (fastType(typ), expr)
 
-        array = arrays.setdefault((typ, arrname), [])
+        array = arrays.setdefault((typ, arrName), [])
         start = len(array)
 
         shift = self.bits
@@ -175,9 +175,9 @@ class BinarySolution(Solution):
         index1 = '(%s)&%d' % (var, mask) if mask else ''
         index = index0 + ('+' if index0 and index1 else '') + index1
         if unitBits >= 8:
-            expr = '%s[%s%s]' % (arrname, start, index)
+            expr = '%s[%s%s]' % (arrName, start, index)
         else:
-            expr = '%s_b%s(%s%s,%s)' % (prefix, unitBits, arrname, start, index)
+            expr = '%s_b%s(%s%s,%s)' % (prefix, unitBits, arrName, start, index)
             shiftBits = int(round(log2(8 // unitBits)))
             mask1 = (8 // unitBits) - 1
             mask2 = (1 << unitBits) - 1
