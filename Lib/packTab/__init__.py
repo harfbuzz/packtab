@@ -339,26 +339,12 @@ class InnerLayer(Layer):
 
         self.split()
 
-    def split(self):
-        if len(self.data) & 1:
-            self.data.append(0)
-
-        mapping = self.mapping = AutoMapping()
-        data2 = _combine2(self.data, lambda a,b: mapping[(a,b)])
-
-        self.next = InnerLayer(data2)
-
-    def solve(self):
-
         solution = InnerSolution(self,
                                  None,
                                  1 if self.bandwidth > 1 else 0,
                                  self.extraOps,
                                  self.bytes)
         self.solutions.append(solution)
-        if self.next is None:
-            return
-        self.next.solve()
 
         bits = 1
         layer = self.next
@@ -377,6 +363,15 @@ class InnerLayer(Layer):
             bits += 1
 
         self.prune_solutions()
+
+    def split(self):
+        if len(self.data) & 1:
+            self.data.append(0)
+
+        mapping = self.mapping = AutoMapping()
+        data2 = _combine2(self.data, lambda a,b: mapping[(a,b)])
+
+        self.next = InnerLayer(data2)
 
     def prune_solutions(self):
         """Remove dominated solutions."""
@@ -498,24 +493,15 @@ class OuterLayer(Layer):
         self.bytes = ceil(self.unitBits * len(self.data) / 8)
         self.next = InnerLayer(data)
 
-    def solve(self):
-
         extraCost = 0
 
         layer = self.next
-        layer.solve()
         for s in layer.solutions:
             nLookups = s.nLookups
             nExtraOps = s.nExtraOps + self.extraOps
             cost = s.cost + extraCost
             solution = OuterSolution(self, s, nLookups, nExtraOps, cost)
             self.solutions.append(solution)
-
-def solve(data, default):
-
-    layer = OuterLayer(data, default)
-    layer.solve()
-    return layer
 
 
 # Public API
@@ -578,7 +564,7 @@ def pack_table(data, mapping=None, default=0, compression=1):
     if not isinstance(default, int):
         default = mapping[default]
 
-    solutions = solve(data, default).solutions
+    solutions = OuterLayer(data, default).solutions
 
     if compression is None:
         solutions.sort(key=lambda s: -s.fullCost)
