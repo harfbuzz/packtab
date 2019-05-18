@@ -203,10 +203,6 @@ class InnerSolution(Solution):
         Solution.__init__(self, layer, next, nLookups, nExtraOps, cost)
         self.bits = bits
 
-    def __repr__(self):
-        return "%s%s" % (self.__class__.__name__,
-               (self.nLookups, self.nExtraOps, self.cost, self.bits))
-
     def genCode(self, code, name=None, var='u'):
         inputVar = var
         if name: var = 'u'
@@ -405,10 +401,6 @@ class OuterSolution(Solution):
 
     def __init__(self, layer, next, nLookups, nExtraOps, cost):
         Solution.__init__(self, layer, next, nLookups, nExtraOps, cost)
-
-    def __repr__(self):
-        return "%s%s" % (self.__class__.__name__,
-               (self.nLookups, self.nExtraOps, self.cost))
 
     def genCode(self, code, name=None, var='u'):
         inputVar = var
