@@ -208,7 +208,7 @@ class InnerSolution(Solution):
         if name: var = 'u'
         expr = var
 
-        typ = typeFor(self.layer.minV, self.layer.maxV)
+        typ = typeFor(0, self.layer.maxV)
         retType = fastType(typ)
         unitBits = self.layer.unitBits
         if not unitBits:
@@ -265,7 +265,6 @@ class InnerSolution(Solution):
             else:
                 data.extend(mapping[d] for d in layer.data)
         else:
-            assert layer.minV == 0, layer.minV
             for d in range(layer.maxV + 1):
                 _expand(d, layers, len(layers) - 1, data)
 
@@ -326,22 +325,19 @@ class InnerLayer(Layer):
     def __init__(self, data):
         Layer.__init__(self, data)
 
-        self.minV, self.maxV = min(data), max(data)
-        bandwidth = self.maxV - self.minV + 1
-        self.unitBits = binaryBitsFor(bandwidth)
+        self.maxV = max(data)
+        self.unitBits = binaryBitsFor(self.maxV + 1)
         self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
         self.bytes = ceil(self.unitBits * len(self.data) / 8)
 
-        assert self.minV == 0
-
-        if bandwidth == 1:
+        if self.maxV == 0:
             return
 
         self.split()
 
         solution = InnerSolution(self,
                                  None,
-                                 1 if bandwidth > 1 else 0,
+                                 1 if self.maxV > 0 else 0,
                                  self.extraOps,
                                  self.bytes)
         self.solutions.append(solution)
