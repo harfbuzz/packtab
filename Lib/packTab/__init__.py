@@ -38,6 +38,7 @@
 # of data tables.
 #
 # TODO:
+# - Reduce code duplication between Inner/Outer genCode().
 # - Handle empty data array.
 # - Don't factor out bias/mult if those don't actually save any space.
 #   Not factoring them out saves ops.
@@ -112,20 +113,20 @@ class Code:
         self.functions = collections.OrderedDict()
         self.arrays = collections.OrderedDict()
 
-    def nameFor(self, nameHint):
-        return '%s_%s' % (self.namespace, nameHint)
+    def nameFor(self, name):
+        return '%s_%s' % (self.namespace, name)
 
-    def addFunction(self, retType, nameHint, args, body):
-        name = self.nameFor(nameHint)
-        key = (retType, name, args)
+    def addFunction(self, linkage, retType, name, args, body):
+        name = self.nameFor(name)
+        key = (linkage, retType, name, args)
         if key in self.functions:
             assert self.functions[key] == body
         else:
             self.functions[key] = body
         return name
 
-    def addArray(self, typ, nameHint):
-        name = self.nameFor(nameHint)
+    def addArray(self, typ, name):
+        name = self.nameFor(name)
         key = (typ, name)
         array = self.arrays.setdefault(key, [])
         start = len(array)
@@ -206,14 +207,17 @@ class InnerSolution(Solution):
         return "%s%s" % (self.__class__.__name__,
                (self.nLookups, self.nExtraOps, self.cost, self.bits))
 
-    def genCode(self, code, prefix='', var='u'):
+    def genCode(self, code, name=None, var='u'):
+        inputVar = var
+        if name: var = 'u'
         expr = var
 
         typ = typeFor(self.layer.minV, self.layer.maxV)
+        retType = fastType(typ)
         unitBits = self.layer.unitBits
         if not unitBits:
             expr = self.layer.data[0]
-            return (fastType(typ), expr)
+            return (retType, expr)
 
         arrName, array, start = code.addArray(typ, typeAbbr(typ))
 
@@ -222,7 +226,7 @@ class InnerSolution(Solution):
         mask = width - 1
 
         if self.next:
-            (_,expr) = self.next.genCode(code, prefix, "%s>>%d" % (var, shift))
+            (_,expr) = self.next.genCode(code, None, "%s>>%d" % (var, shift))
 
         start = str(start)+'+' if start else ''
         if expr == '0' or width == 0:
@@ -240,7 +244,8 @@ class InnerSolution(Solution):
             mask1 = (8 // unitBits) - 1
             mask2 = (1 << unitBits) - 1
             funcBody = '(a[i>>%s]>>(i&%s))&%s' % (shiftBits, mask1, mask2)
-            funcName = code.addFunction ('unsigned',
+            funcName = code.addFunction ('static inline',
+                                         'unsigned',
                                          'b%s' % unitBits,
                                          (('const uint8_t*', 'a'),
                                           ('unsigned',       'i')),
@@ -271,7 +276,15 @@ class InnerSolution(Solution):
         data = _combine(data, self.layer.unitBits)
         array.extend(data)
 
-        return (fastType(typ), expr)
+        if name:
+            funcName = code.addFunction (None,
+                                         retType,
+                                         name,
+                                         (('unsigned', 'u'),),
+                                         expr)
+            expr = '%s(%s)' % (funcName, inputVar)
+
+        return (retType, expr)
 
 def _expand(v, stack, i, out):
     if i < 0:
@@ -397,18 +410,21 @@ class OuterSolution(Solution):
         return "%s%s" % (self.__class__.__name__,
                (self.nLookups, self.nExtraOps, self.cost))
 
-    def genCode(self, code, prefix='', var='u'):
+    def genCode(self, code, name=None, var='u'):
+        inputVar = var
+        if name: var = 'u'
         expr = var
 
         typ = typeFor(self.layer.minV, self.layer.maxV)
+        retType = fastType(typ)
         unitBits = self.layer.unitBits
         if not unitBits:
             assert False # Audit this branch
             expr = self.layer.data[0]
-            return (fastType(typ), expr)
+            return (retType, expr)
 
         if self.next:
-            (_,expr) = self.next.genCode(code, prefix, var)
+            (_,expr) = self.next.genCode(code, None, var)
 
         if self.layer.mult != 1:
             expr = '%d*%s' % (self.layer.mult, expr)
@@ -420,7 +436,16 @@ class OuterSolution(Solution):
                                 expr,
                                 self.layer.default) # TODO Map default?
 
-        return (fastType(typ), expr)
+        if name:
+            funcName = code.addFunction (None,
+                                         retType,
+                                         name,
+                                         (('unsigned', 'u'),),
+                                         expr)
+            expr = '%s(%s)' % (funcName, inputVar)
+
+        return (retType, expr)
+
 
 def gcd(lst):
     """

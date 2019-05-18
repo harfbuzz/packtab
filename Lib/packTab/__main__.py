@@ -40,7 +40,7 @@ if sys.version_info[0] < 3:
 def print_solution(solution, prefix):
     print()
     code = Code(prefix)
-    expr = solution.genCode(code, prefix)
+    expr = solution.genCode(code, 'get')
     for (elt, name), values in code.arrays.items():
         print('static const %s %s[%s] = {' % (elt, name, len(values)))
         w = max(len(str(v)) for v in values)
@@ -52,11 +52,10 @@ def print_solution(solution, prefix):
             print(' ', ''.join('%*s,' % (w, v) for v in line))
         print('};')
     print()
-    for (ret, name, args), body in code.functions.items():
+    for (linkage, ret, name, args), body in code.functions.items():
+        linkage = '' if linkage is None else linkage+' '
         args = ', '.join(' '.join(p) for p in args)
-        print('static inline %s %s (%s) {\n  return %s;\n}' % (ret, name, args, body))
-    print()
-    print('%s %s (unsigned u) {\n  return %s;\n}' % (expr[0], prefix, expr[1]))
+        print('%s%s %s (%s) {\n  return %s;\n}' % (linkage, ret, name, args, body))
 
 
 def solve(name, data, default=0):
