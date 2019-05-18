@@ -40,8 +40,6 @@
 # TODO:
 # - Reduce code duplication between Inner/Outer genCode().
 # - Handle empty data array.
-# - Don't factor out bias/mult if those don't actually save any space.
-#   Not factoring them out saves ops.
 # - Bake in width multiplier into array data if doing so doesn't enlarge
 #   data type.  Again, that would save ops.
 # - If an array is not larger than 64 bits, inline it in code directly
@@ -84,27 +82,46 @@ class AutoMapping(collections.defaultdict):
         self[v] = key
         return v
 
-def binaryBitsFor(n):
+def binaryBitsFor(minV, maxV):
     """Returns smallest power-of-two number of bits needed to represent n
     different values.
 
-    >>> binaryBitsFor(1)
+    >>> binaryBitsFor(0, 0)
     0
-    >>> binaryBitsFor(2)
+    >>> binaryBitsFor(0, 1)
     1
-    >>> binaryBitsFor(7)
+    >>> binaryBitsFor(0, 6)
     4
-    >>> binaryBitsFor(15)
+    >>> binaryBitsFor(0, 14)
     4
-    >>> binaryBitsFor(16)
+    >>> binaryBitsFor(0, 15)
     4
-    >>> binaryBitsFor(17)
+    >>> binaryBitsFor(0, 16)
     8
-    >>> binaryBitsFor(100)
+    >>> binaryBitsFor(0, 100)
     8
     """
-    if n == 1: return 0
-    return 1 << int(ceil(log2(log2(n))))
+
+    assert minV <= maxV
+
+    if 0 <= minV and maxV <= 0: return 0
+    if 0 <= minV and maxV <= 1: return 1
+    if 0 <= minV and maxV <= 3: return 2
+    if 0 <= minV and maxV <= 15: return 4
+
+    if 0 <= minV and maxV <= 255: return 8
+    if -128 <= minV and maxV <= 127: return 8
+
+    if 0 <= minV and maxV <= 65535: return 16
+    if -32768 <= minV and maxV <= 32767: return 16
+
+    if 0 <= minV and maxV <= 4294967295: return 32
+    if -2147483648 <= minV and maxV <= 2147483647: return 32
+
+    if 0 <= minV and maxV <= 18446744073709551615: return 64
+    if -9223372036854775808 <= minV and maxV <= 9223372036854775807: return 64
+
+    assert False
 
 
 class Code:
@@ -154,6 +171,8 @@ class Solution:
                (self.nLookups, self.nExtraOps, self.cost))
 
 def typeFor(minV, maxV):
+
+    assert minV <= maxV
 
     if 0 <= minV and maxV <= 255: return 'uint8_t'
     if -128 <= minV and maxV <= 127: return 'int8_t'
@@ -326,7 +345,7 @@ class InnerLayer(Layer):
         Layer.__init__(self, data)
 
         self.maxV = max(data)
-        self.unitBits = binaryBitsFor(self.maxV + 1)
+        self.unitBits = binaryBitsFor(0, self.maxV)
         self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
         self.bytes = ceil(self.unitBits * len(self.data) / 8)
 
@@ -470,19 +489,35 @@ class OuterLayer(Layer):
         self.default = default
 
         self.minV, self.maxV = min(data), max(data)
-        bandwidth = self.maxV - self.minV + 1
-        self.extraOps = 0
 
-        bias = self.bias = self.minV
-        if bias: self.extraOps += 1
+        bias = 0
+        mult = 1
+        unitBits = binaryBitsFor(self.minV, self.maxV)
 
-        mult = self.mult = gcd(data)
-        if mult: self.extraOps += 1
+        b = self.minV
+        if unitBits > binaryBitsFor(0, self.maxV - b):
+            unitBits = binaryBitsFor(0, self.maxV - b)
+            bias = b
 
-        self.unitBits = binaryBitsFor(bandwidth)
-        self.extraOps += subByteAccessOps if self.unitBits < 8 else 0
+        m = gcd(data)
+        if unitBits > binaryBitsFor(self.minV // m, self.maxV // m):
+            unitBits = binaryBitsFor(self.minV // m, self.maxV // m)
+            bias = 0
+            mult = m
+
+        if b:
+            m = gcd(d - b for d in data)
+            if unitBits > binaryBitsFor(0, (self.maxV - b) // m):
+                unitBits = binaryBitsFor(0, (self.maxV - b) // m)
+                bias = b
+                mult = m
+
+        self.unitBits = unitBits
+        self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
         self.bias = bias
+        if bias: self.extraOps += 1
         self.mult = mult
+        if mult: self.extraOps += 1
         data = [(d - bias) // mult for d in self.data]
         default = (self.default - bias) // mult
 
