@@ -401,7 +401,6 @@ class OuterSolution(Solution):
         expr = var
 
         typ = typeFor(self.layer.minV, self.layer.maxV)
-        arrName = prefix+'_'+typeAbbr(typ)
         unitBits = self.layer.unitBits
         if not unitBits:
             assert False # Audit this branch
