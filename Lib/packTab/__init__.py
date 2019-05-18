@@ -480,9 +480,7 @@ class OuterLayer(Layer):
 
         self.minV, self.maxV = min(data), max(data)
         self.bandwidth = self.maxV - self.minV + 1
-        self.unitBits = binaryBitsFor(self.bandwidth)
-        self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
-        self.bytes = ceil(self.unitBits * len(self.data) / 8)
+        self.extraOps = 0
 
         bias = self.bias = self.minV
         if bias: self.extraOps += 1
@@ -490,9 +488,14 @@ class OuterLayer(Layer):
         mult = self.mult = gcd(data)
         if mult: self.extraOps += 1
 
+        self.unitBits = binaryBitsFor(self.bandwidth)
+        self.extraOps += subByteAccessOps if self.unitBits < 8 else 0
+        self.bias = bias
+        self.mult = mult
         data = [(d - bias) // mult for d in self.data]
         default = (self.default - bias) // mult
 
+        self.bytes = ceil(self.unitBits * len(self.data) / 8)
         self.next = InnerLayer(data)
 
     def solve(self):
