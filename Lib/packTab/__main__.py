@@ -41,10 +41,6 @@ def print_solution(solution, prefix):
     print()
     code = Code(prefix)
     expr = solution.genCode(code, prefix)
-    for (ret, name, args), body in code.functions.items():
-        args = ', '.join(' '.join(p) for p in args)
-        print('static inline %s %s (%s) {\n  return %s;\n}' % (ret, name, args, body))
-    print()
     for (elt, name), values in code.arrays.items():
         print('static const %s %s[%s] = {' % (elt, name, len(values)))
         w = max(len(str(v)) for v in values)
@@ -55,6 +51,10 @@ def print_solution(solution, prefix):
             line = values[i:i+n]
             print(' ', ''.join('%*s,' % (w, v) for v in line))
         print('};')
+    print()
+    for (ret, name, args), body in code.functions.items():
+        args = ', '.join(' '.join(p) for p in args)
+        print('static inline %s %s (%s) {\n  return %s;\n}' % (ret, name, args, body))
     print()
     print('%s %s (unsigned u) {\n  return %s;\n}' % (expr[0], prefix, expr[1]))
 
