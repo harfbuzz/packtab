@@ -327,21 +327,21 @@ class InnerLayer(Layer):
         Layer.__init__(self, data)
 
         self.minV, self.maxV = min(data), max(data)
-        self.bandwidth = self.maxV - self.minV + 1
-        self.unitBits = binaryBitsFor(self.bandwidth)
+        bandwidth = self.maxV - self.minV + 1
+        self.unitBits = binaryBitsFor(bandwidth)
         self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
         self.bytes = ceil(self.unitBits * len(self.data) / 8)
 
         assert self.minV == 0
 
-        if self.bandwidth == 1:
+        if bandwidth == 1:
             return
 
         self.split()
 
         solution = InnerSolution(self,
                                  None,
-                                 1 if self.bandwidth > 1 else 0,
+                                 1 if bandwidth > 1 else 0,
                                  self.extraOps,
                                  self.bytes)
         self.solutions.append(solution)
@@ -350,7 +350,7 @@ class InnerLayer(Layer):
         layer = self.next
         while layer is not None:
 
-            extraCost = ceil(layer.bandwidth * (1<<bits) * self.unitBits / 8)
+            extraCost = ceil((layer.maxV + 1) * (1<<bits) * self.unitBits / 8)
 
             for s in layer.solutions:
                 nLookups = s.nLookups + 1
@@ -474,7 +474,7 @@ class OuterLayer(Layer):
         self.default = default
 
         self.minV, self.maxV = min(data), max(data)
-        self.bandwidth = self.maxV - self.minV + 1
+        bandwidth = self.maxV - self.minV + 1
         self.extraOps = 0
 
         bias = self.bias = self.minV
@@ -483,7 +483,7 @@ class OuterLayer(Layer):
         mult = self.mult = gcd(data)
         if mult: self.extraOps += 1
 
-        self.unitBits = binaryBitsFor(self.bandwidth)
+        self.unitBits = binaryBitsFor(bandwidth)
         self.extraOps += subByteAccessOps if self.unitBits < 8 else 0
         self.bias = bias
         self.mult = mult
