@@ -307,7 +307,7 @@ class InnerSolution(Solution):
         index1 = '(%s)&%d' % (var, mask) if mask else ''
         index = index0 + ('+' if index0 and index1 else '') + index1
         if unitBits >= 8:
-            expr = '%s[%s%s]' % (arrName, , index)
+            expr = '%s[%s%s]' % (arrName, start, index)
         else:
             shiftBits = int(round(log2(8 // unitBits)))
             mask1 = (8 // unitBits) - 1
