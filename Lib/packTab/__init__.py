@@ -196,11 +196,12 @@ class Code:
         printn = partial(print, file=file, sep='')
         println = partial(printn, indent)
 
-        printn()
         for (typ, name), values in self.arrays.items():
             print_array(typ, name, values, println)
 
-        printn()
+        if self.arrays and self.functions:
+            printn()
+
         for (link, ret, name, args), body in self.functions.items():
             link = linkage if link is None else link
             print_function(ret, name, args, body, println, linkage=link)
