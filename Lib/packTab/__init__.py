@@ -181,11 +181,12 @@ class Code:
             self.functions[key] = body
         return name
 
-    def addArray(self, typ, name):
+    def addArray(self, typ, name, values=[]):
         name = self.nameFor(name)
         key = (typ, name)
         array = self.arrays.setdefault(key, [])
         start = len(array)
+        array.extend(values)
         return name, array, start
 
     def print_c(self,
