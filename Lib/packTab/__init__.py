@@ -136,7 +136,8 @@ def print_array(typ, name, values,
     # Make sure we can read multiple times from values:
     assert len(values) == len(values)
 
-    print('%s%s %s[%s] = {' % (linkage, typ, name, len(values)))
+    print('%s%s' % (linkage, typ))
+    print('%s[%s] = {' % (name, len(values)))
     w = max(len(str(v)) for v in values)
     n = 1 << int(log2(78 / (w + 1)))
     if (w + 2) * n <= 78:
@@ -189,7 +190,10 @@ class Code:
         for (link, ret, name, args), body in self.functions.items():
             link = linkage if link is None else link+' '
             args = ', '.join(' '.join(p) for p in args)
-            println('%s%s %s (%s) {\n  return %s;\n}' % (linkage, ret, name, args, body))
+            println('%s%s' % (linkage, ret))
+            println('%s (%s) {' % (name, args))
+            println('  return %s;' % body)
+            println('}')
 
     def print_h(self,
                 file=sys.stdout,
