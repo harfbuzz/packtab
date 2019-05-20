@@ -631,12 +631,13 @@ def pack_table(data, default=0, compression=1, mapping=None):
     to zero.  If data values are strings and @mapping is not provided, then
     @default must be specified, or bad things might happen.
 
+    TODO: Mapping does not work currently.
     """
 
     # Set up mapping.  See docstring.
     if mapping is not None:
-        assert (all(isinstance(k, int) and not isinstance(v, int) for k,v in mapping.items()) or
-            all(not isinstance(k, int) and isinstance(v, int) for k,v in mapping.items()))
+        #assert (all(isinstance(k, int) and not isinstance(v, int) for k,v in mapping.items()) or
+        #        all(not isinstance(k, int) and isinstance(v, int) for k,v in mapping.items()))
         mapping2 = mapping.copy()
         for k,v in mapping.items():
             mapping2[v] = k
