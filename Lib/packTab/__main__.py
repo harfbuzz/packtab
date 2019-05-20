@@ -47,7 +47,7 @@ def print_solution(solution, prefix):
 def solve(name, data, default=0):
 
     print('/* Dataset: %s. Unique values: %d */' % (name, len(set(data))))
-    solutions = pack_table(data, None, default, None)
+    solutions = pack_table(data, default, compression=None)
     print()
 
     print('/* All dominant solutions: (nLookups, nExtraOps, cost, bits): fullCost')

@@ -307,7 +307,7 @@ class InnerSolution(Solution):
         index1 = '(%s)&%d' % (var, mask) if mask else ''
         index = index0 + ('+' if index0 and index1 else '') + index1
         if unitBits >= 8:
-            expr = '%s[%s%s]' % (arrName, start, index)
+            expr = '%s[%s%s]' % (arrName, , index)
         else:
             shiftBits = int(round(log2(8 // unitBits)))
             mask1 = (8 // unitBits) - 1
@@ -319,7 +319,7 @@ class InnerSolution(Solution):
                                          (('const uint8_t*', 'a'),
                                           ('unsigned',       'i')),
                                          funcBody)
-            expr = '%s(%s%s,%s)' % (funcName, arrName, start, index)
+            expr = '%s(%s%s,%s)' % (funcName, start, arrName, index)
 
         layers = []
         layer = self.layer
@@ -591,7 +591,7 @@ class OuterLayer(Layer):
 
 # Public API
 
-def pack_table(data, mapping=None, default=0, compression=1):
+def pack_table(data, default=0, compression=1, mapping=None):
     """
 
     @data is either a dictionary mapping integer keys to values, of an
