@@ -179,7 +179,7 @@ class Code:
         if linkage: linkage += ' '
         if isinstance(indent, int): indent *= ' '
         printn = partial(print, file=file, sep='')
-        println = partial(print, indent)
+        println = partial(printn, indent)
 
         printn()
         for (elt, name), values in self.arrays.items():
@@ -197,7 +197,8 @@ class Code:
                 indent=0):
         if linkage: linkage += ' '
         if isinstance(indent, int): indent *= ' '
-        println = partial(print, indent)
+        printn = partial(print, file=file, sep='')
+        println = partial(printn, indent)
 
         for (link, ret, name, args), body in self.functions.items():
             link = linkage if link is None else link+' '
