@@ -57,6 +57,7 @@ import sys
 import collections
 from math import ceil
 from itertools import count
+from functools import partial
 try:
     from math import log2
 except ImportError:
@@ -124,6 +125,26 @@ def binaryBitsFor(minV, maxV):
     assert False
 
 
+def print_array(typ, name, values,
+                print=print,
+                linkage='static const'):
+
+    if linkage: linkage += ' '
+
+    # Make sure we can read multiple times from values:
+    assert len(values) == len(values)
+
+    print('%s%s %s[%s] = {' % (linkage, typ, name, len(values)))
+    w = max(len(str(v)) for v in values)
+    n = 1 << int(log2(78 / (w + 1)))
+    if (w + 2) * n <= 78:
+        w += 1
+    for i in range(0, len(values), n):
+        line = values[i:i+n]
+        print('  ' + ''.join('%*s,' % (w, v) for v in line))
+    print('};')
+
+
 class Code:
     def __init__(self, namespace=''):
         self.namespace = namespace
@@ -149,6 +170,37 @@ class Code:
         start = len(array)
         return name, array, start
 
+    def print_c(self,
+                file=sys.stdout,
+                linkage='',
+                indent=0):
+        if linkage: linkage += ' '
+        if isinstance(indent, int): indent *= ' '
+        printn = partial(print, file=file, sep='')
+        println = partial(print, indent)
+
+        printn()
+        for (elt, name), values in self.arrays.items():
+            print_array(elt, name, values, println)
+
+        printn()
+        for (link, ret, name, args), body in self.functions.items():
+            link = linkage if link is None else link+' '
+            args = ', '.join(' '.join(p) for p in args)
+            println('%s%s %s (%s) {\n  return %s;\n}' % (linkage, ret, name, args, body))
+
+    def print_h(self,
+                file=sys.stdout,
+                linkage='',
+                indent=0):
+        if linkage: linkage += ' '
+        if isinstance(indent, int): indent *= ' '
+        println = partial(print, indent)
+
+        for (link, ret, name, args), body in self.functions.items():
+            link = linkage if link is None else link+' '
+            args = ', '.join(' '.join(p) for p in args)
+            println('%s%s %s (%s);' % (linkage, ret, name, args))
 
 bytesPerOp = 4
 lookupOps = 4

@@ -41,21 +41,7 @@ def print_solution(solution, prefix):
     print()
     code = Code(prefix)
     expr = solution.genCode(code, 'get')
-    for (elt, name), values in code.arrays.items():
-        print('static const %s %s[%s] = {' % (elt, name, len(values)))
-        w = max(len(str(v)) for v in values)
-        n = 1 << int(log2(78 / (w + 1)))
-        if (w + 2) * n <= 78:
-            w += 1
-        for i in range(0, len(values), n):
-            line = values[i:i+n]
-            print(' ', ''.join('%*s,' % (w, v) for v in line))
-        print('};')
-    print()
-    for (linkage, ret, name, args), body in code.functions.items():
-        linkage = '' if linkage is None else linkage+' '
-        args = ', '.join(' '.join(p) for p in args)
-        print('%s%s %s (%s) {\n  return %s;\n}' % (linkage, ret, name, args, body))
+    code.print_c()
 
 
 def solve(name, data, default=0):
