@@ -137,7 +137,8 @@ def print_array(typ, name, values,
     assert len(values) == len(values)
 
     print('%s%s' % (linkage, typ))
-    print('%s[%s] = {' % (name, len(values)))
+    print('%s[%s] =' % (name, len(values)))
+    print('{')
     w = max(len(str(v)) for v in values)
     n = 1 << int(log2(78 / (w + 1)))
     if (w + 2) * n <= 78:
@@ -146,6 +147,20 @@ def print_array(typ, name, values,
         line = values[i:i+n]
         print('  ' + ''.join('%*s,' % (w, v) for v in line))
     print('};')
+
+def print_function(ret, name, args, body,
+                   print=print,
+                   linkage='static const'):
+
+    if linkage: linkage += ' '
+
+    args = ', '.join(' '.join(p) for p in args)
+
+    print('%s%s' % (linkage, ret))
+    print('%s (%s)' % (name, args))
+    print('{')
+    print('  return %s;' % body)
+    print('}')
 
 
 class Code:
@@ -177,23 +192,18 @@ class Code:
                 file=sys.stdout,
                 linkage='',
                 indent=0):
-        if linkage: linkage += ' '
         if isinstance(indent, int): indent *= ' '
         printn = partial(print, file=file, sep='')
         println = partial(printn, indent)
 
         printn()
-        for (elt, name), values in self.arrays.items():
-            print_array(elt, name, values, println)
+        for (typ, name), values in self.arrays.items():
+            print_array(typ, name, values, println)
 
         printn()
         for (link, ret, name, args), body in self.functions.items():
-            link = linkage if link is None else link+' '
-            args = ', '.join(' '.join(p) for p in args)
-            println('%s%s' % (linkage, ret))
-            println('%s (%s) {' % (name, args))
-            println('  return %s;' % body)
-            println('}')
+            link = linkage if link is None else link
+            print_function(ret, name, args, body, println, linkage=link)
 
     def print_h(self,
                 file=sys.stdout,
