@@ -132,6 +132,9 @@ def print_array(typ, name, values,
                 linkage='static const'):
 
     if linkage: linkage += ' '
+    if typ == 'uint16_t' and any(v < 0 for v in values):
+        print(values)
+        abort
 
     # Make sure we can read multiple times from values:
     assert len(values) == len(values)
@@ -298,7 +301,7 @@ class InnerSolution(Solution):
         if name: var = 'u'
         expr = var
 
-        typ = typeFor(0, self.layer.maxV)
+        typ = typeFor(self.layer.minV, self.layer.maxV)
         retType = fastType(typ)
         unitBits = self.layer.unitBits
         if not unitBits:
@@ -357,10 +360,14 @@ class InnerSolution(Solution):
             else:
                 data.extend(mapping[d] for d in layer.data)
         else:
+            assert layer.minV == 0
             for d in range(layer.maxV + 1):
                 _expand(d, layers, len(layers) - 1, data)
 
         data = _combine(data, self.layer.unitBits)
+        if typ == 'uint16_t' and min(data) < 0:
+            print(layers, data)
+            abort
         array.extend(data)
 
         if name:
@@ -418,7 +425,9 @@ class InnerLayer(Layer):
         Layer.__init__(self, data)
 
         self.maxV = max(data)
-        self.unitBits = binaryBitsFor(0, self.maxV)
+        self.minV = min(data)
+        # TODO When to check minV is zero?  Enforce if unitBits < 8
+        self.unitBits = binaryBitsFor(self.minV, self.maxV)
         self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
         self.bytes = ceil(self.unitBits * len(self.data) / 8)
 
