@@ -321,7 +321,7 @@ class InnerSolution(Solution):
             index0 = str(expr)
         else:
             index0 = '%d*(%s)' % (width, expr)
-        index1 = '(%s)&%d' % (var, mask) if mask else ''
+        index1 = '((%s)&%d)' % (var, mask) if mask else ''
         index = index0 + ('+' if index0 and index1 else '') + index1
         if unitBits >= 8:
             expr = '%s[%s%s]' % (arrName, start, index)
@@ -661,7 +661,7 @@ def pack_table(data, default=0, compression=1, mapping=None):
 
     # Convert all to integers
     assert (all(isinstance(v, int) for v in data) or
-        all(not isinstance(v, int) for v in data))
+        all(not isinstance(v, int) for v in data)), data
     if not isinstance(data[0], int):
         data = [mapping[v] for v in data]
     if not isinstance(default, int):
