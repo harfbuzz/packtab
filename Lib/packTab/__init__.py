@@ -323,8 +323,8 @@ class InnerSolution(Solution):
         elif width == 1:
             index0 = str(expr)
         else:
-            index0 = '%d*(%s)' % (width, expr)
-        index1 = '((%s)&%d)' % (var, mask) if mask else ''
+            index0 = '%du*(%s)' % (width, expr)
+        index1 = '((%s)&%du)' % (var, mask) if mask else ''
         index = index0 + ('+' if index0 and index1 else '') + index1
         if unitBits >= 8:
             if start:
