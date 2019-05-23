@@ -311,19 +311,18 @@ class InnerSolution(Solution):
         arrName, array, start = code.addArray(typ, typeAbbr(typ))
 
         shift = self.bits
-        width = 1 << shift
-        mask = width - 1
+        mask = (1 << shift) - 1
 
         if self.next:
             (_,expr) = self.next.genCode(code, None, "%s>>%d" % (var, shift))
 
         start = str(start)+'+' if start else ''
-        if expr == '0' or width == 0:
+        if expr == '0':
             index0 = ''
-        elif width == 1:
+        elif shift == 0:
             index0 = str(expr)
         else:
-            index0 = '%du*(%s)' % (width, expr)
+            index0 = '((%s)<<%d)' % (expr, shift)
         index1 = '((%s)&%du)' % (var, mask) if mask else ''
         index = index0 + ('+' if index0 and index1 else '') + index1
         if unitBits >= 8:
