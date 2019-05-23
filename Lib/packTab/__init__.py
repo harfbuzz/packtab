@@ -143,7 +143,7 @@ def print_array(typ, name, values,
     print('%s[%s] =' % (name, len(values)))
     print('{')
     w = max(len(str(v)) for v in values)
-    n = 1 << int(log2(78 / (w + 1)))
+    n = 1 << int(round(log2(78 / (w + 1))))
     if (w + 2) * n <= 78:
         w += 1
     for i in range(0, len(values), n):
@@ -331,10 +331,11 @@ class InnerSolution(Solution):
                 index = '(%s)' % index
             expr = '%s[%s%s]' % (arrName, start, index)
         else:
-            shiftBits = int(round(log2(8 // unitBits)))
+            shift1 = int(round(log2(8 // unitBits)))
             mask1 = (8 // unitBits) - 1
+            shift2 = int(round(log2(unitBits)))
             mask2 = (1 << unitBits) - 1
-            funcBody = '(a[i>>%s]>>(i&%s))&%s' % (shiftBits, mask1, mask2)
+            funcBody = '(a[i>>%s]>>((i&%du)<<%d))&%du' % (shift1, mask1, shift2, mask2)
             funcName = code.addFunction ('static inline',
                                          'unsigned',
                                          'b%s' % unitBits,
