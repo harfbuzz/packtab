@@ -515,7 +515,7 @@ class OuterSolution(Solution):
         if self.layer.bias != 0:
             expr = '%d+%s' % (self.layer.bias, expr)
 
-        expr = '%s<%d?%s:%s' % (var,
+        expr = '%s<%du?%s:%s' % (var,
                                 len(self.layer.data),
                                 expr,
                                 self.layer.default) # TODO Map default?
