@@ -513,6 +513,8 @@ class OuterSolution(Solution):
         if self.layer.mult != 1:
             expr = '%d*%s' % (self.layer.mult, expr)
         if self.layer.bias != 0:
+            if self.layer.bias < 0:
+                expr = "(%s) %s" % (retType, expr)
             expr = '%d+%s' % (self.layer.bias, expr)
 
         expr = '%s<%du?%s:%s' % (var,
@@ -537,6 +539,8 @@ def gcd(lst):
     1
     >>> gcd([48])
     48
+    >>> gcd([-48])
+    48
     >>> gcd([48, 60])
     12
     >>> gcd([48, 60, 6])
@@ -546,10 +550,11 @@ def gcd(lst):
     """
     it = iter(lst)
     try:
-        x = next(it)
+        x = abs(next(it))
     except StopIteration:
         return 1
     for y in it:
+        y = abs(y)
         while y:
             x, y = y, x%y
         if x == 1:
