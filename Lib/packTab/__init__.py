@@ -308,13 +308,13 @@ class InnerSolution(Solution):
             expr = self.layer.data[0]
             return (retType, expr)
 
-        arrName, array, start = code.addArray(typ, typeAbbr(typ))
-
         shift = self.bits
         mask = (1 << shift) - 1
 
         if self.next:
             (_,expr) = self.next.genCode(code, None, "%s>>%d" % (var, shift))
+
+        arrName, array, start = code.addArray(typ, typeAbbr(typ))
 
         start = str(start)+'+' if start else ''
         if expr == '0':
