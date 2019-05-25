@@ -314,7 +314,40 @@ class InnerSolution(Solution):
         if self.next:
             (_,expr) = self.next.genCode(code, None, "%s>>%d" % (var, shift))
 
+
+        # Generate data.
+
         arrName, array, start = code.addArray(typ, typeAbbr(typ))
+
+        layers = []
+        layer = self.layer
+        bits = self.bits
+        while bits:
+            layers.append(layer)
+            layer = layer.next
+            bits -= 1
+
+        data = []
+        if not layers:
+            mapping = layer.mapping
+            # TODO Following is always true.
+            if isinstance(layer.data[0], int):
+                data.extend(layer.data)
+            else:
+                data.extend(mapping[d] for d in layer.data)
+        else:
+            assert layer.minV == 0
+            for d in range(layer.maxV + 1):
+                _expand(d, layers, len(layers) - 1, data)
+
+        data = _combine(data, self.layer.unitBits)
+        if typ == 'uint16_t' and min(data) < 0:
+            print(layers, data)
+            abort
+        array.extend(data)
+
+
+        # Generate expression.
 
         start = str(start)+'+' if start else ''
         if expr == '0':
@@ -343,32 +376,8 @@ class InnerSolution(Solution):
                                          funcBody)
             expr = '%s(%s%s,%s)' % (funcName, start, arrName, index)
 
-        layers = []
-        layer = self.layer
-        bits = self.bits
-        while bits:
-            layers.append(layer)
-            layer = layer.next
-            bits -= 1
 
-        data = []
-        if not layers:
-            mapping = layer.mapping
-            # TODO Following is always true.
-            if isinstance(layer.data[0], int):
-                data.extend(layer.data)
-            else:
-                data.extend(mapping[d] for d in layer.data)
-        else:
-            assert layer.minV == 0
-            for d in range(layer.maxV + 1):
-                _expand(d, layers, len(layers) - 1, data)
-
-        data = _combine(data, self.layer.unitBits)
-        if typ == 'uint16_t' and min(data) < 0:
-            print(layers, data)
-            abort
-        array.extend(data)
+        # Wrap up.
 
         if name:
             funcName = code.addFunction (None,
