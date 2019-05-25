@@ -317,8 +317,6 @@ class InnerSolution(Solution):
 
         # Generate data.
 
-        arrName, array, start = code.addArray(typ, typeAbbr(typ))
-
         layers = []
         layer = self.layer
         bits = self.bits
@@ -341,6 +339,8 @@ class InnerSolution(Solution):
                 _expand(d, layers, len(layers) - 1, data)
 
         data = _combine(data, self.layer.unitBits)
+
+        arrName, array, start = code.addArray(typ, typeAbbr(typ))
         array.extend(data)
 
 
