@@ -399,10 +399,7 @@ def _combine2(data, f):
     data2 = []
     it = iter(data)
     for first in it:
-        try:
-            data2.append(f(first, next(it)))
-        except StopIteration:
-            data2.append(f(first, 0))
+        data2.append(f(first, next(it, 0)))
     return data2
 
 
@@ -549,16 +546,13 @@ def gcd(lst):
     1
     """
     it = iter(lst)
-    try:
-        x = abs(next(it))
-    except StopIteration:
-        return 1
+    x = abs(next(it, 1))
     for y in it:
         y = abs(y)
         while y:
             x, y = y, x%y
         if x == 1:
-            return 1
+            break
     return x
 
 class OuterLayer(Layer):
