@@ -341,9 +341,6 @@ class InnerSolution(Solution):
                 _expand(d, layers, len(layers) - 1, data)
 
         data = _combine(data, self.layer.unitBits)
-        if typ == 'uint16_t' and min(data) < 0:
-            print(layers, data)
-            abort
         array.extend(data)
 
 
