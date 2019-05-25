@@ -184,13 +184,13 @@ class Code:
             self.functions[key] = body
         return name
 
-    def addArray(self, typ, name, values=[]):
+    def addArray(self, typ, name, values):
         name = self.nameFor(name)
         key = (typ, name)
         array = self.arrays.setdefault(key, [])
         start = len(array)
         array.extend(values)
-        return name, array, start
+        return name, start
 
     def print_c(self,
                 file=sys.stdout,
@@ -340,8 +340,7 @@ class InnerSolution(Solution):
 
         data = _combine(data, self.layer.unitBits)
 
-        arrName, array, start = code.addArray(typ, typeAbbr(typ))
-        array.extend(data)
+        arrName, start = code.addArray(typ, typeAbbr(typ), data)
 
 
         # Generate expression.
