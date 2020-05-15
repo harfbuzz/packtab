@@ -132,9 +132,6 @@ def print_array(typ, name, values,
                 linkage='static const'):
 
     if linkage: linkage += ' '
-    if typ == 'uint16_t' and any(v < 0 for v in values):
-        print(values)
-        abort
 
     # Make sure we can read multiple times from values:
     assert len(values) == len(values)
