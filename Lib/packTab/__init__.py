@@ -105,6 +105,8 @@ def binaryBitsFor(minV, maxV):
     8
     """
 
+    if type(minV) != int or type(maxV) != int: return 8
+
     assert minV <= maxV
 
     if 0 <= minV and maxV <= 0: return 0
@@ -244,6 +246,8 @@ class Solution:
 def typeFor(minV, maxV):
 
     assert minV <= maxV
+
+    if type(minV) != int or type(maxV) != int: return 'uint8_t'
 
     if 0 <= minV and maxV <= 255: return 'uint8_t'
     if -128 <= minV and maxV <= 127: return 'int8_t'
@@ -437,7 +441,7 @@ class InnerLayer(Layer):
 
         solution = InnerSolution(self,
                                  None,
-                                 1 if self.maxV > 0 else 0,
+                                 0 if self.maxV == 0 else 1,
                                  self.extraOps,
                                  self.bytes)
         self.solutions.append(solution)
@@ -576,24 +580,26 @@ class OuterLayer(Layer):
         bias = 0
         mult = 1
         unitBits = binaryBitsFor(self.minV, self.maxV)
-
-        b = self.minV
-        if unitBits > binaryBitsFor(0, self.maxV - b):
-            unitBits = binaryBitsFor(0, self.maxV - b)
-            bias = b
-
-        m = gcd(data)
-        if unitBits > binaryBitsFor(self.minV // m, self.maxV // m):
-            unitBits = binaryBitsFor(self.minV // m, self.maxV // m)
-            bias = 0
-            mult = m
-
-        if b:
-            m = gcd(d - b for d in data)
-            if unitBits > binaryBitsFor(0, (self.maxV - b) // m):
-                unitBits = binaryBitsFor(0, (self.maxV - b) // m)
+        if type(self.minV) == int and type(self.maxV) == int:
+            b = self.minV
+            if unitBits > binaryBitsFor(0, self.maxV - b):
+                unitBits = binaryBitsFor(0, self.maxV - b)
                 bias = b
+
+            m = gcd(data)
+            if unitBits > binaryBitsFor(self.minV // m, self.maxV // m):
+                unitBits = binaryBitsFor(self.minV // m, self.maxV // m)
+                bias = 0
                 mult = m
+
+            if b:
+                m = gcd(d - b for d in data)
+                if unitBits > binaryBitsFor(0, (self.maxV - b) // m):
+                    unitBits = binaryBitsFor(0, (self.maxV - b) // m)
+                    bias = b
+                    mult = m
+            data = [(d - bias) // mult for d in self.data]
+            default = (self.default - bias) // mult
 
         self.unitBits = unitBits
         self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
@@ -601,8 +607,6 @@ class OuterLayer(Layer):
         if bias: self.extraOps += 1
         self.mult = mult
         if mult: self.extraOps += 1
-        data = [(d - bias) // mult for d in self.data]
-        default = (self.default - bias) // mult
 
         self.bytes = ceil(self.unitBits * len(self.data) / 8)
         self.next = InnerLayer(data)
@@ -630,21 +634,14 @@ def pack_table(data, default=0, compression=1, mapping=None):
     @mapping, if set, should be either a mapping from integer keys to
     string values, or vice versa.  Either way, it's first augmented by its
     own inverse.  After that it's used to map any value in @data that is
-    not an integer, to obtain its integer value used for packing size
-    considerations.  When generating output table, integer values are tried
-    mapped through mapping to obtain string mnemonic to write out.  If such
-    mapping does not exist, the integer value will be written out.
+    not an integer.  If @mapping is not provided and data values are
+    strings, the strings are written out verbatim.
 
-    If mapping is not set, it will be automatically populated to assign
-    increasing integers starting from zero, to every new string key in
-    @data.  This internal mapping only affects value size assumptions, but
-    will not otherwise be visible in the output.
+    If mapping is not provided and values are strings, it is assumed that they
+    all fit in an unsigned char.
 
     @default is value to be used for keys not specified in @data.  Defaults
-    to zero.  If data values are strings and @mapping is not provided, then
-    @default must be specified, or bad things might happen.
-
-    TODO: Mapping does not work currently.
+    to zero.
     """
 
     # Set up mapping.  See docstring.
@@ -656,8 +653,6 @@ def pack_table(data, default=0, compression=1, mapping=None):
             mapping2[v] = k
         mapping = mapping2
         del mapping2
-    else:
-        mapping = AutoMapping()
 
     # Set up data as a list.
     if isinstance(data, dict):
@@ -673,10 +668,10 @@ def pack_table(data, default=0, compression=1, mapping=None):
 
     # Convert all to integers
     assert (all(isinstance(v, int) for v in data) or
-        all(not isinstance(v, int) for v in data)), data
-    if not isinstance(data[0], int):
+        all(not isinstance(v, int) for v in data))
+    if not isinstance(data[0], int) and mapping is not None:
         data = [mapping[v] for v in data]
-    if not isinstance(default, int):
+    if not isinstance(default, int) and mapping is not None:
         default = mapping[default]
 
     solutions = OuterLayer(data, default).solutions
