@@ -72,7 +72,7 @@ if sys.version_info[0] < 3:
 
 __all__ = ['Code', 'pack_table', 'pick_solution']
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 
 class AutoMapping(collections.defaultdict):
