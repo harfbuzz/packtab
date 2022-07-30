@@ -37,71 +37,21 @@ if sys.version_info[0] < 3:
     chr = unichr
 
 
-def print_solution(solution, prefix):
-    print()
-    code = Code(prefix)
-    expr = solution.genCode(code, 'get')
-    code.print_c()
-
-
-def solve(name, data, default=0):
-
-    print('/* Dataset: %s. Unique values: %d */' % (name, len(set(data))))
-    solutions = pack_table(data, default, compression=None)
-    print()
-
-    print('/* All dominant solutions: (nLookups, nExtraOps, cost, bits): fullCost')
-    for s in solutions:
-        print(' *', s, s.fullCost)
-    print(' */')
-    print()
-
-    # Optimal affords one extra lookup per each halving of storage.
-    optimal = pick_solution (solutions)
-    print('/* Optimal solution: %s */' % optimal)
-    print_solution(optimal, name+'_o')
-    print()
-
-    # Compact affords three extra lookups per each halving of storage.
-    compact = pick_solution (solutions, 3)
-    print('/* Compact solution: %s */' % compact)
-    print_solution(compact, name+'_c')
-    print()
-
-
 def main(args=sys.argv):
 
-    print('#include <stdint.h>')
-    print()
+    if len(args) == 1:
+        print("usage: packTab data...")
+        return 1
 
-    print('/* General_Category: */')
-    f, default = ucd.category, 'Cn'
-    gc_data = [f(chr(u)) for u in range(0x110000)]
-    solve('gc', gc_data, default)
-    print()
+    data = [int(v) for v in args[1:]]
+    default = 0
+    compression = 1
 
-    print('/* Canonical_Combining_Class: */')
-    f, default = ucd.combining, 0
-    ccc_data = [f(chr(u)) for u in range(0x110000)]
-    solve('ccc', ccc_data, default)
-    print()
+    solution = pack_table(data, default, compression=compression)
 
-    print('/*General_Category and Canonical_Combining_Class combined: */')
-    f, default = ucd.combining, 0
-    gc_ccc_data = [gc+str(ccc) for gc,ccc in zip(gc_data, ccc_data)]
-    solve('gc_ccc', gc_ccc_data, default)
-    print()
-
-    print('/* Mirrored: */')
-    f, default = ucd.mirrored, 0
-    mirrored_data = [f(chr(u)) for u in range(0x110000)]
-    solve('mirrored', mirrored_data, default)
-    print()
-
-    mirrored_gcs = [gc for m,gc in zip(mirrored_data, gc_data) if m]
-    print('/* GC of all mirrored characters: %s */' % set(mirrored_gcs))
-
-    solve('trivial', [-2, -2, 4, -2], 0)
+    code = Code('data')
+    expr = solution.genCode(code, 'get')
+    code.print_c()
 
     return 0
 
