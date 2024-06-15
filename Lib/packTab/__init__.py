@@ -582,20 +582,23 @@ class OuterLayer(Layer):
         unitBits = binaryBitsFor(self.minV, self.maxV)
         if type(self.minV) == int and type(self.maxV) == int:
             b = self.minV
-            if unitBits > binaryBitsFor(0, self.maxV - b):
-                unitBits = binaryBitsFor(0, self.maxV - b)
+            candidateBits = binaryBitsFor(0, self.maxV - b)
+            if unitBits > candidateBits:
+                unitBits = candidateBits
                 bias = b
 
             m = gcd(data)
-            if unitBits > binaryBitsFor(self.minV // m, self.maxV // m):
-                unitBits = binaryBitsFor(self.minV // m, self.maxV // m)
+            candidateBits = binaryBitsFor(self.minV // m, self.maxV // m)
+            if unitBits > candidateBits:
+                unitBits = candidateBits
                 bias = 0
                 mult = m
 
             if b:
                 m = gcd(d - b for d in data)
-                if unitBits > binaryBitsFor(0, (self.maxV - b) // m):
-                    unitBits = binaryBitsFor(0, (self.maxV - b) // m)
+                candidateBits = binaryBitsFor(0, (self.maxV - b) // m)
+                if unitBits > candidateBits:
+                    unitBits = candidateBits
                     bias = b
                     mult = m
             data = [(d - bias) // mult for d in self.data]
