@@ -19,11 +19,11 @@ import sys
 import unicodedata as ucd
 
 if sys.version_info[0] < 3:
-
     if sys.maxunicode < 0x10FFFF:
         # workarounds for Python 2 "narrow" builds with UCS2-only support.
 
         _narrow_unichr = unichr
+
         def unichr(i):
             try:
                 return _narrow_unichr(i)
@@ -33,19 +33,19 @@ if sys.version_info[0] < 3:
                     escape_str = "\\U" + padded_hex_str
                     return escape_str.decode("unicode-escape")
                 except UnicodeDecodeError:
-                    raise ValueError('unichr() arg not in range(0x110000)')
+                    raise ValueError("unichr() arg not in range(0x110000)")
+
     chr = unichr
 
 
 def main(args=sys.argv):
-
     if len(args) == 1:
         print("usage: packTab [--rust] data...")
         return 1
 
-    language = 'c'
-    if args[1] == '--rust':
-        language = 'rust'
+    language = "c"
+    if args[1] == "--rust":
+        language = "rust"
         args = args[1:]
 
     data = [int(v) for v in args[1:]]
@@ -54,11 +54,12 @@ def main(args=sys.argv):
 
     solution = pack_table(data, default, compression=compression)
 
-    code = Code('data')
-    expr = solution.genCode(code, 'get')
+    code = Code("data")
+    expr = solution.genCode(code, "get")
     code.print_code(language=language)
 
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

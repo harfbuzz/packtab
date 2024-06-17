@@ -58,11 +58,13 @@ import collections
 from math import ceil
 from itertools import count
 from functools import partial
+
 try:
     from math import log2
 except ImportError:
     from math import log
     from functools import partial
+
     log2 = lambda x: log(x, 2)
 
 if sys.version_info[0] < 3:
@@ -70,13 +72,14 @@ if sys.version_info[0] < 3:
     ceil = lambda x: int(_float_ceil(x))
 
 
-__all__ = ['Code', 'pack_table', 'pick_solution']
+__all__ = ["Code", "pack_table", "pick_solution"]
 
 __version__ = "0.2.0"
 
 
 class AutoMapping(collections.defaultdict):
     _next = 0
+
     def __missing__(self, key):
         assert not isinstance(key, int)
         v = self._next
@@ -84,6 +87,7 @@ class AutoMapping(collections.defaultdict):
         self[key] = v
         self[v] = key
         return v
+
 
 def binaryBitsFor(minV, maxV):
     """Returns smallest power-of-two number of bits needed to represent n
@@ -105,32 +109,44 @@ def binaryBitsFor(minV, maxV):
     8
     """
 
-    if type(minV) != int or type(maxV) != int: return 8
+    if type(minV) != int or type(maxV) != int:
+        return 8
 
     assert minV <= maxV
 
-    if 0 <= minV and maxV <= 0: return 0
-    if 0 <= minV and maxV <= 1: return 1
-    if 0 <= minV and maxV <= 3: return 2
-    if 0 <= minV and maxV <= 15: return 4
+    if 0 <= minV and maxV <= 0:
+        return 0
+    if 0 <= minV and maxV <= 1:
+        return 1
+    if 0 <= minV and maxV <= 3:
+        return 2
+    if 0 <= minV and maxV <= 15:
+        return 4
 
-    if 0 <= minV and maxV <= 255: return 8
-    if -128 <= minV and maxV <= 127: return 8
+    if 0 <= minV and maxV <= 255:
+        return 8
+    if -128 <= minV and maxV <= 127:
+        return 8
 
-    if 0 <= minV and maxV <= 65535: return 16
-    if -32768 <= minV and maxV <= 32767: return 16
+    if 0 <= minV and maxV <= 65535:
+        return 16
+    if -32768 <= minV and maxV <= 32767:
+        return 16
 
-    if 0 <= minV and maxV <= 4294967295: return 32
-    if -2147483648 <= minV and maxV <= 2147483647: return 32
+    if 0 <= minV and maxV <= 4294967295:
+        return 32
+    if -2147483648 <= minV and maxV <= 2147483647:
+        return 32
 
-    if 0 <= minV and maxV <= 18446744073709551615: return 64
-    if -9223372036854775808 <= minV and maxV <= 9223372036854775807: return 64
+    if 0 <= minV and maxV <= 18446744073709551615:
+        return 64
+    if -9223372036854775808 <= minV and maxV <= 9223372036854775807:
+        return 64
 
     assert False
 
 
 class Language:
-
     def print_array(self, name, array, *, print=print, private=True):
         linkage = self.private_array_linkage if private else self.public_array_linkage
         decl = self.declare_array(linkage, array.typ, name, len(array.values))
@@ -141,83 +157,76 @@ class Language:
         if (w + 2) * n <= 78:
             w += 1
         for i in range(0, len(array.values), n):
-            line = array.values[i:i+n]
-            print('  ' + ''.join('%*s,' % (w, v) for v in line))
+            line = array.values[i : i + n]
+            print("  " + "".join("%*s," % (w, v) for v in line))
         print(self.array_end)
 
     def print_function(self, name, function, *, print=print):
-        linkage = self.private_function_linkage if function.private else self.public_function_linkage
+        linkage = (
+            self.private_function_linkage
+            if function.private
+            else self.public_function_linkage
+        )
         decl = self.declare_function(linkage, function.retType, name, function.args)
         print(decl)
         print(self.function_start)
-        print('  return %s;' % function.body)
+        print("  return %s;" % function.body)
         print(self.function_end)
 
 
 class LanguageC(Language):
-    name = 'c'
-    private_array_linkage = 'static const'
-    public_array_linkage = 'extern const'
-    private_function_linkage = 'static inline'
-    public_function_linkage = 'extern inline'
-    array_start = '{'
-    array_end = '};'
-    function_start = '{'
-    function_end = '}'
+    name = "c"
+    private_array_linkage = "static const"
+    public_array_linkage = "extern const"
+    private_function_linkage = "static inline"
+    public_function_linkage = "extern inline"
+    array_start = "{"
+    array_end = "};"
+    function_start = "{"
+    function_end = "}"
 
     def declare_array(self, linkage, typ, name, size):
         if linkage:
-            linkage += ' '
-        return '%s%s %s[%d]' % (linkage, typ, name, size)
+            linkage += " "
+        return "%s%s %s[%d]" % (linkage, typ, name, size)
 
     def declare_function(self, linkage, retType, name, args):
         if linkage:
-            linkage += ' '
-        args = [
-            (
-                t if t[-1] != '*' else "const %s" % t,
-                n
-            )
-            for t, n in args
-        ]
-        args = ', '.join(' '.join(p) for p in args)
-        return('%s%s %s (%s)' % (linkage, retType, name, args))
+            linkage += " "
+        args = [(t if t[-1] != "*" else "const %s" % t, n) for t, n in args]
+        args = ", ".join(" ".join(p) for p in args)
+        return "%s%s %s (%s)" % (linkage, retType, name, args)
+
 
 class LanguageRust(Language):
-    name = 'rust'
-    private_array_linkage = 'const'
-    public_array_linkage = 'pub const'
-    private_function_linkage = ''
-    public_function_linkage = 'pub'
-    array_start = '['
-    array_end = '];'
-    function_start = '{'
-    function_end = '}'
+    name = "rust"
+    private_array_linkage = "const"
+    public_array_linkage = "pub const"
+    private_function_linkage = ""
+    public_function_linkage = "pub"
+    array_start = "["
+    array_end = "];"
+    function_start = "{"
+    function_end = "}"
 
     def declare_array(self, linkage, typ, name, size):
         if linkage:
-            linkage += ' '
+            linkage += " "
         typ = "stdint::%s" % typ
-        return '%s%s: [%s; %d]' % (linkage, name, typ, size)
+        return "%s%s: [%s; %d]" % (linkage, name, typ, size)
 
     def declare_function(self, linkage, retType, name, args):
         if linkage:
-            linkage += ' '
+            linkage += " "
         retType = "stdint::%s" % retType
-        args = [
-            (
-                t if t[-1] != '*' else "&[%s]" % t[:-1],
-                n
-            )
-            for t, n in args
-        ]
-        args = ', '.join("%s: stdint::%s" % (n, t) for t, n in args)
-        return('%sfn %s (%s) -> %s' % (linkage, name, args, retType))
+        args = [(t if t[-1] != "*" else "&[%s]" % t[:-1], n) for t, n in args]
+        args = ", ".join("%s: stdint::%s" % (n, t) for t, n in args)
+        return "%sfn %s (%s) -> %s" % (linkage, name, args, retType)
 
 
 languages = {
-    'c': LanguageC(),
-    'rust': LanguageRust(),
+    "c": LanguageC(),
+    "rust": LanguageRust(),
 }
 
 
@@ -241,13 +250,13 @@ class Function:
 
 
 class Code:
-    def __init__(self, namespace=''):
+    def __init__(self, namespace=""):
         self.namespace = namespace
         self.functions = collections.OrderedDict()
         self.arrays = collections.OrderedDict()
 
     def nameFor(self, name):
-        return '%s_%s' % (self.namespace, name)
+        return "%s_%s" % (self.namespace, name)
 
     def addFunction(self, retType, name, args, body, *, private=True):
         name = self.nameFor(name)
@@ -268,15 +277,10 @@ class Code:
         start = array.extend(values)
         return name, start
 
-    def print_code(self,
-                   *,
-                   file=sys.stdout,
-                   linkage='',
-                   indent=0,
-                   language='c'):
+    def print_code(self, *, file=sys.stdout, linkage="", indent=0, language="c"):
         if isinstance(indent, int):
-            indent *= ' '
-        printn = partial(print, file=file, sep='')
+            indent *= " "
+        printn = partial(print, file=file, sep="")
         println = partial(printn, indent)
 
         language = languages[language]
@@ -290,31 +294,27 @@ class Code:
         for name, function in self.functions.items():
             language.print_function(name, function, print=println)
 
-    def print_c(self,
-                file=sys.stdout,
-                linkage='',
-                indent=0):
-        print_code(self, file, linkage, indent, language='c')
+    def print_c(self, file=sys.stdout, linkage="", indent=0):
+        print_code(self, file, linkage, indent, language="c")
 
-    def print_h(self,
-                file=sys.stdout,
-                linkage='',
-                indent=0):
-        if linkage: linkage += ' '
+    def print_h(self, file=sys.stdout, linkage="", indent=0):
+        if linkage:
+            linkage += " "
         if isinstance(indent, int):
-            indent *= ' '
-        printn = partial(print, file=file, sep='')
+            indent *= " "
+        printn = partial(print, file=file, sep="")
         println = partial(printn, indent)
 
         for name, function in self.functions.items():
-            link = (linkage if function.linkage is None else function.linkage)+' '
-            args = ', '.join(' '.join(p) for p in function.args)
-            println('%s%s %s (%s);' % (linkage, function.retType, name, args))
+            link = (linkage if function.linkage is None else function.linkage) + " "
+            args = ", ".join(" ".join(p) for p in function.args)
+            println("%s%s %s (%s);" % (linkage, function.retType, name, args))
 
 
 bytesPerOp = 4
 lookupOps = 4
 subByteAccessOps = 4
+
 
 class Solution:
     def __init__(self, layer, next, nLookups, nExtraOps, cost):
@@ -329,28 +329,40 @@ class Solution:
         return self.cost + (self.nLookups * lookupOps + self.nExtraOps) * bytesPerOp
 
     def __repr__(self):
-        return "%s%s" % (self.__class__.__name__,
-               (self.nLookups, self.nExtraOps, self.cost))
+        return "%s%s" % (
+            self.__class__.__name__,
+            (self.nLookups, self.nExtraOps, self.cost),
+        )
+
 
 def typeFor(minV, maxV):
-
     assert minV <= maxV
 
-    if type(minV) != int or type(maxV) != int: return 'uint8_t'
+    if type(minV) != int or type(maxV) != int:
+        return "uint8_t"
 
-    if 0 <= minV and maxV <= 255: return 'uint8_t'
-    if -128 <= minV and maxV <= 127: return 'int8_t'
+    if 0 <= minV and maxV <= 255:
+        return "uint8_t"
+    if -128 <= minV and maxV <= 127:
+        return "int8_t"
 
-    if 0 <= minV and maxV <= 65535: return 'uint16_t'
-    if -32768 <= minV and maxV <= 32767: return 'int16_t'
+    if 0 <= minV and maxV <= 65535:
+        return "uint16_t"
+    if -32768 <= minV and maxV <= 32767:
+        return "int16_t"
 
-    if 0 <= minV and maxV <= 4294967295: return 'uint32_t'
-    if -2147483648 <= minV and maxV <= 2147483647: return 'int32_t'
+    if 0 <= minV and maxV <= 4294967295:
+        return "uint32_t"
+    if -2147483648 <= minV and maxV <= 2147483647:
+        return "int32_t"
 
-    if 0 <= minV and maxV <= 18446744073709551615: return 'uint64_t'
-    if -9223372036854775808 <= minV and maxV <= 9223372036854775807: return 'int64_t'
+    if 0 <= minV and maxV <= 18446744073709551615:
+        return "uint64_t"
+    if -9223372036854775808 <= minV and maxV <= 9223372036854775807:
+        return "int64_t"
 
     assert False
+
 
 def typeWidth(typ):
     """
@@ -359,7 +371,8 @@ def typeWidth(typ):
     >>> typeWidth('uint32_t')
     32
     """
-    return int(typ[typ.index('int')+3:-2])
+    return int(typ[typ.index("int") + 3 : -2])
+
 
 def typeAbbr(typ):
     """
@@ -368,7 +381,8 @@ def typeAbbr(typ):
     >>> typeAbbr('uint32_t')
     'u32'
     """
-    return typ[0]+str(typeWidth(typ))
+    return typ[0] + str(typeWidth(typ))
+
 
 def fastType(typ):
     """
@@ -377,18 +391,18 @@ def fastType(typ):
     >>> fastType('uint32_t')
     'uint_fast32_t'
     """
-    return typ.replace('int', 'int_fast')
+    return typ.replace("int", "int_fast")
 
 
 class InnerSolution(Solution):
-
     def __init__(self, layer, next, nLookups, nExtraOps, cost, bits=0):
         Solution.__init__(self, layer, next, nLookups, nExtraOps, cost)
         self.bits = bits
 
-    def genCode(self, code, name=None, var='u'):
+    def genCode(self, code, name=None, var="u"):
         inputVar = var
-        if name: var = 'u'
+        if name:
+            var = "u"
         expr = var
 
         typ = typeFor(self.layer.minV, self.layer.maxV)
@@ -402,8 +416,7 @@ class InnerSolution(Solution):
         mask = (1 << shift) - 1
 
         if self.next:
-            (_,expr) = self.next.genCode(code, None, "%s>>%d" % (var, shift))
-
+            (_, expr) = self.next.genCode(code, None, "%s>>%d" % (var, shift))
 
         # Generate data.
 
@@ -432,46 +445,43 @@ class InnerSolution(Solution):
 
         arrName, start = code.addArray(typ, typeAbbr(typ), data)
 
-
         # Generate expression.
 
-        start = str(start)+'+' if start else ''
-        if expr == '0':
-            index0 = ''
+        start = str(start) + "+" if start else ""
+        if expr == "0":
+            index0 = ""
         elif shift == 0:
             index0 = str(expr)
         else:
-            index0 = '((%s)<<%d)' % (expr, shift)
-        index1 = '((%s)&%du)' % (var, mask) if mask else ''
-        index = index0 + ('+' if index0 and index1 else '') + index1
+            index0 = "((%s)<<%d)" % (expr, shift)
+        index1 = "((%s)&%du)" % (var, mask) if mask else ""
+        index = index0 + ("+" if index0 and index1 else "") + index1
         if unitBits >= 8:
             if start:
-                index = '(%s)' % index
-            expr = '%s[%s%s]' % (arrName, start, index)
+                index = "(%s)" % index
+            expr = "%s[%s%s]" % (arrName, start, index)
         else:
             shift1 = int(round(log2(8 // unitBits)))
             mask1 = (8 // unitBits) - 1
             shift2 = int(round(log2(unitBits)))
             mask2 = (1 << unitBits) - 1
-            funcBody = '(a[i>>%s]>>((i&%du)<<%d))&%du' % (shift1, mask1, shift2, mask2)
-            funcName = code.addFunction ('unsigned',
-                                         'b%s' % unitBits,
-                                         (('uint8_t*', 'a'),
-                                          ('unsigned',       'i')),
-                                         funcBody)
-            expr = '%s(%s%s,%s)' % (funcName, start, arrName, index)
-
+            funcBody = "(a[i>>%s]>>((i&%du)<<%d))&%du" % (shift1, mask1, shift2, mask2)
+            funcName = code.addFunction(
+                "unsigned",
+                "b%s" % unitBits,
+                (("uint8_t*", "a"), ("unsigned", "i")),
+                funcBody,
+            )
+            expr = "%s(%s%s,%s)" % (funcName, start, arrName, index)
 
         # Wrap up.
 
         if name:
-            funcName = code.addFunction (retType,
-                                         name,
-                                         (('unsigned', 'u'),),
-                                         expr)
-            expr = '%s(%s)' % (funcName, inputVar)
+            funcName = code.addFunction(retType, name, (("unsigned", "u"),), expr)
+            expr = "%s(%s)" % (funcName, inputVar)
 
         return (retType, expr)
+
 
 def _expand(v, stack, i, out):
     if i < 0:
@@ -482,11 +492,16 @@ def _expand(v, stack, i, out):
     _expand(v[0], stack, i, out)
     _expand(v[1], stack, i, out)
 
+
 def _combine(data, bits):
-    if bits <= 1: data = _combine2(data, lambda a,b: (b<<1)|a)
-    if bits <= 2: data = _combine2(data, lambda a,b: (b<<2)|a)
-    if bits <= 4: data = _combine2(data, lambda a,b: (b<<4)|a)
+    if bits <= 1:
+        data = _combine2(data, lambda a, b: (b << 1) | a)
+    if bits <= 2:
+        data = _combine2(data, lambda a, b: (b << 2) | a)
+    if bits <= 4:
+        data = _combine2(data, lambda a, b: (b << 4) | a)
     return data
+
 
 def _combine2(data, f):
     data2 = []
@@ -497,11 +512,11 @@ def _combine2(data, f):
 
 
 class Layer:
-
     def __init__(self, data):
         self.data = data
         self.next = None
         self.solutions = []
+
 
 class InnerLayer(Layer):
 
@@ -526,18 +541,15 @@ class InnerLayer(Layer):
 
         self.split()
 
-        solution = InnerSolution(self,
-                                 None,
-                                 0 if self.maxV == 0 else 1,
-                                 self.extraOps,
-                                 self.bytes)
+        solution = InnerSolution(
+            self, None, 0 if self.maxV == 0 else 1, self.extraOps, self.bytes
+        )
         self.solutions.append(solution)
 
         bits = 1
         layer = self.next
         while layer is not None:
-
-            extraCost = ceil((layer.maxV + 1) * (1<<bits) * self.unitBits / 8)
+            extraCost = ceil((layer.maxV + 1) * (1 << bits) * self.unitBits / 8)
 
             for s in layer.solutions:
                 nLookups = s.nLookups + 1
@@ -556,7 +568,7 @@ class InnerLayer(Layer):
             self.data.append(0)
 
         mapping = self.mapping = AutoMapping()
-        data2 = _combine2(self.data, lambda a,b: mapping[(a,b)])
+        data2 = _combine2(self.data, lambda a, b: mapping[(a, b)])
 
         self.next = InnerLayer(data2)
 
@@ -566,10 +578,13 @@ class InnerLayer(Layer):
         # Doing it the slowest, O(N^2), way for now.
         sols = self.solutions
         for a in sols:
-            if a.cost == None: continue
+            if a.cost == None:
+                continue
             for b in sols:
-                if a is b: continue
-                if b.cost == None: continue
+                if a is b:
+                    continue
+                if b.cost == None:
+                    continue
 
                 # Rules of dominance: a being not worse than b
                 if a.nLookups <= b.nLookups and a.fullCost <= b.fullCost:
@@ -579,45 +594,45 @@ class InnerLayer(Layer):
         self.solutions = [s for s in self.solutions if s.cost is not None]
         self.solutions.sort(key=lambda s: s.nLookups)
 
-class OuterSolution(Solution):
 
+class OuterSolution(Solution):
     def __init__(self, layer, next, nLookups, nExtraOps, cost):
         Solution.__init__(self, layer, next, nLookups, nExtraOps, cost)
 
-    def genCode(self, code, name=None, var='u'):
+    def genCode(self, code, name=None, var="u"):
         inputVar = var
-        if name: var = 'u'
+        if name:
+            var = "u"
         expr = var
 
         typ = typeFor(self.layer.minV, self.layer.maxV)
         retType = fastType(typ)
         unitBits = self.layer.unitBits
         if not unitBits:
-            assert False # Audit this branch
+            assert False  # Audit this branch
             expr = self.layer.data[0]
             return (retType, expr)
 
         if self.next:
-            (_,expr) = self.next.genCode(code, None, var)
+            (_, expr) = self.next.genCode(code, None, var)
 
         if self.layer.mult != 1:
-            expr = '%d*%s' % (self.layer.mult, expr)
+            expr = "%d*%s" % (self.layer.mult, expr)
         if self.layer.bias != 0:
             if self.layer.bias < 0:
                 expr = "(%s) %s" % (retType, expr)
-            expr = '%d+%s' % (self.layer.bias, expr)
+            expr = "%d+%s" % (self.layer.bias, expr)
 
-        expr = '%s<%du?%s:%s' % (var,
-                                len(self.layer.data),
-                                expr,
-                                self.layer.default) # TODO Map default?
+        expr = "%s<%du?%s:%s" % (
+            var,
+            len(self.layer.data),
+            expr,
+            self.layer.default,
+        )  # TODO Map default?
 
         if name:
-            funcName = code.addFunction (retType,
-                                         name,
-                                         (('unsigned', 'u'),),
-                                         expr)
-            expr = '%s(%s)' % (funcName, inputVar)
+            funcName = code.addFunction(retType, name, (("unsigned", "u"),), expr)
+            expr = "%s(%s)" % (funcName, inputVar)
 
         return (retType, expr)
 
@@ -642,10 +657,11 @@ def gcd(lst):
     for y in it:
         y = abs(y)
         while y:
-            x, y = y, x%y
+            x, y = y, x % y
         if x == 1:
             break
     return x
+
 
 class OuterLayer(Layer):
 
@@ -693,9 +709,11 @@ class OuterLayer(Layer):
         self.unitBits = unitBits
         self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
         self.bias = bias
-        if bias: self.extraOps += 1
+        if bias:
+            self.extraOps += 1
         self.mult = mult
-        if mult: self.extraOps += 1
+        if mult:
+            self.extraOps += 1
 
         self.bytes = ceil(self.unitBits * len(self.data) / 8)
         self.next = InnerLayer(data)
@@ -712,6 +730,7 @@ class OuterLayer(Layer):
 
 
 # Public API
+
 
 def pack_table(data, default=0, compression=1, mapping=None):
     """
@@ -735,29 +754,30 @@ def pack_table(data, default=0, compression=1, mapping=None):
 
     # Set up mapping.  See docstring.
     if mapping is not None:
-        #assert (all(isinstance(k, int) and not isinstance(v, int) for k,v in mapping.items()) or
+        # assert (all(isinstance(k, int) and not isinstance(v, int) for k,v in mapping.items()) or
         #        all(not isinstance(k, int) and isinstance(v, int) for k,v in mapping.items()))
         mapping2 = mapping.copy()
-        for k,v in mapping.items():
+        for k, v in mapping.items():
             mapping2[v] = k
         mapping = mapping2
         del mapping2
 
     # Set up data as a list.
     if isinstance(data, dict):
-        assert(all(isinstance(k, int) for k,v in data.items()))
+        assert all(isinstance(k, int) for k, v in data.items())
         minK = min(data.keys())
         maxK = max(data.keys())
         assert minK >= 0
         data2 = [default] * (maxK + 1)
-        for k,v in data.items():
+        for k, v in data.items():
             data2[k] = v
         data = data2
         del data2
 
     # Convert all to integers
-    assert (all(isinstance(v, int) for v in data) or
-        all(not isinstance(v, int) for v in data))
+    assert all(isinstance(v, int) for v in data) or all(
+        not isinstance(v, int) for v in data
+    )
     if not isinstance(data[0], int) and mapping is not None:
         data = [mapping[v] for v in data]
     if not isinstance(default, int) and mapping is not None:
@@ -771,10 +791,12 @@ def pack_table(data, default=0, compression=1, mapping=None):
 
     return pick_solution(solutions, compression)
 
+
 def pick_solution(solutions, compression=1):
-    return min(solutions, key=lambda s: s.nLookups + compression*log2(s.fullCost))
+    return min(solutions, key=lambda s: s.nLookups + compression * log2(s.fullCost))
 
 
 if __name__ == "__main__":
     import doctest
+
     sys.exit(doctest.testmod().failed)
