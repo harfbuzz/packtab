@@ -129,40 +129,73 @@ def binaryBitsFor(minV, maxV):
     assert False
 
 
-def print_array(typ, name, values,
-                print=print,
-                linkage='static const'):
+class Array:
+    def __init__(self, typ):
+        self.typ = typ
+        self.values = []
 
-    if linkage: linkage += ' '
+    def extend(self, values):
+        start = len(self.values)
+        self.values.extend(values)
+        return start
 
-    # Make sure we can read multiple times from values:
-    assert len(values) == len(values)
+    def print(self,
+              name,
+              print=print,
+              linkage=None,
+              language='c'):
 
-    print('%s%s' % (linkage, typ))
-    print('%s[%s] =' % (name, len(values)))
-    print('{')
-    w = max(len(str(v)) for v in values)
-    n = 1 << int(round(log2(78 / (w + 1))))
-    if (w + 2) * n <= 78:
-        w += 1
-    for i in range(0, len(values), n):
-        line = values[i:i+n]
-        print('  ' + ''.join('%*s,' % (w, v) for v in line))
-    print('};')
+        if linkage is None:
+            linkage = {
+                'c': 'static const',
+                'rust': 'const',
+            }.get(language)
+        linkage = linkage or ''
+        if linkage:
+            linkage += ' '
 
-def print_function(ret, name, args, body,
-                   print=print,
-                   linkage='static const'):
+        print('%s%s' % (linkage, self.typ))
+        print('%s[%s] =' % (name, len(self.values)))
+        print('{')
+        w = max(len(str(v)) for v in self.values)
+        n = 1 << int(round(log2(78 / (w + 1))))
+        if (w + 2) * n <= 78:
+            w += 1
+        for i in range(0, len(self.values), n):
+            line = self.values[i:i+n]
+            print('  ' + ''.join('%*s,' % (w, v) for v in line))
+        print('};')
 
-    if linkage: linkage += ' '
 
-    args = ', '.join(' '.join(p) for p in args)
+class Function:
+    def __init__(self, linkage, retType, args, body):
+        self.linkage = linkage
+        self.retType = retType
+        self.args = args
+        self.body = body
 
-    print('%s%s' % (linkage, ret))
-    print('%s (%s)' % (name, args))
-    print('{')
-    print('  return %s;' % body)
-    print('}')
+    def print(self,
+              name,
+              print=print,
+              language='c'):
+
+        linkage = self.linkage
+        if linkage is None:
+            linkage = {
+                'c': 'static inline',
+                'rust': '',
+            }.get(language)
+        linkage = linkage or ''
+        if linkage:
+            linkage += ' '
+
+        args = ', '.join(' '.join(p) for p in self.args)
+
+        print('%s%s' % (linkage, self.retType))
+        print('%s (%s)' % (name, args))
+        print('{')
+        print('  return %s;' % self.body)
+        print('}')
 
 
 class Code:
@@ -176,38 +209,47 @@ class Code:
 
     def addFunction(self, linkage, retType, name, args, body):
         name = self.nameFor(name)
-        key = (linkage, retType, name, args)
-        if key in self.functions:
-            assert self.functions[key] == body
+        if name in self.functions:
+            assert self.functions[name].linkage == linkage
+            assert self.functions[name].retType == retType
+            assert self.functions[name].args == args
+            assert self.functions[name].body == body
         else:
-            self.functions[key] = body
+            self.functions[name] = Function(linkage, retType, args, body)
         return name
 
     def addArray(self, typ, name, values):
         name = self.nameFor(name)
-        key = (typ, name)
-        array = self.arrays.setdefault(key, [])
-        start = len(array)
-        array.extend(values)
+        array = self.arrays.get(name)
+        if array is None:
+            array = self.arrays[name] = Array(typ)
+        start = array.extend(values)
         return name, start
+
+    def print_code(self,
+                   *,
+                   file=sys.stdout,
+                   linkage='',
+                   indent=0,
+                   language='c'):
+        if isinstance(indent, int): indent *= ' '
+        printn = partial(print, file=file, sep='')
+        println = partial(printn, indent)
+
+        for name, array in self.arrays.items():
+            array.print(name, println, language=language)
+
+        if self.arrays and self.functions:
+            printn()
+
+        for name, function in self.functions.items():
+            function.print(name, println, language=language)
 
     def print_c(self,
                 file=sys.stdout,
                 linkage='',
                 indent=0):
-        if isinstance(indent, int): indent *= ' '
-        printn = partial(print, file=file, sep='')
-        println = partial(printn, indent)
-
-        for (typ, name), values in self.arrays.items():
-            print_array(typ, name, values, println)
-
-        if self.arrays and self.functions:
-            printn()
-
-        for (link, ret, name, args), body in self.functions.items():
-            link = linkage if link is None else link
-            print_function(ret, name, args, body, println, linkage=link)
+        print_code(self, file, linkage, indent, language='c')
 
     def print_h(self,
                 file=sys.stdout,

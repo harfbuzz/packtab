@@ -40,8 +40,13 @@ if sys.version_info[0] < 3:
 def main(args=sys.argv):
 
     if len(args) == 1:
-        print("usage: packTab data...")
+        print("usage: packTab [--rust] data...")
         return 1
+
+    language = 'c'
+    if args[1] == '--rust':
+        language = 'rust'
+        args = args[1:]
 
     data = [int(v) for v in args[1:]]
     default = 0
@@ -51,7 +56,7 @@ def main(args=sys.argv):
 
     code = Code('data')
     expr = solution.genCode(code, 'get')
-    code.print_c()
+    code.print_code(language=language)
 
     return 0
 
