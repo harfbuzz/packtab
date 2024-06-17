@@ -129,6 +129,98 @@ def binaryBitsFor(minV, maxV):
     assert False
 
 
+class Language:
+
+    def print_array(self, name, array, *, print=print, private=True):
+        linkage = self.private_array_linkage if private else self.public_array_linkage
+        decl = self.declare_array(linkage, array.typ, name, len(array.values))
+        print(decl)
+        print(self.array_start)
+        w = max(len(str(v)) for v in array.values)
+        n = 1 << int(round(log2(78 / (w + 1))))
+        if (w + 2) * n <= 78:
+            w += 1
+        for i in range(0, len(array.values), n):
+            line = array.values[i:i+n]
+            print('  ' + ''.join('%*s,' % (w, v) for v in line))
+        print(self.array_end)
+
+    def print_function(self, name, function, *, print=print):
+        linkage = self.private_function_linkage if function.private else self.public_function_linkage
+        decl = self.declare_function(linkage, function.retType, name, function.args)
+        print(decl)
+        print(self.function_start)
+        print('  return %s;' % function.body)
+        print(self.function_end)
+
+
+class LanguageC(Language):
+    name = 'c'
+    private_array_linkage = 'static const'
+    public_array_linkage = 'extern const'
+    private_function_linkage = 'static inline'
+    public_function_linkage = 'extern inline'
+    array_start = '{'
+    array_end = '};'
+    function_start = '{'
+    function_end = '}'
+
+    def declare_array(self, linkage, typ, name, size):
+        if linkage:
+            linkage += ' '
+        return '%s%s %s[%d]' % (linkage, typ, name, size)
+
+    def declare_function(self, linkage, retType, name, args):
+        if linkage:
+            linkage += ' '
+        args = [
+            (
+                t if t[-1] != '*' else "const %s" % t,
+                n
+            )
+            for t, n in args
+        ]
+        args = ', '.join(' '.join(p) for p in args)
+        return('%s%s %s (%s)' % (linkage, retType, name, args))
+
+class LanguageRust(Language):
+    name = 'rust'
+    private_array_linkage = 'const'
+    public_array_linkage = 'pub const'
+    private_function_linkage = ''
+    public_function_linkage = 'pub'
+    array_start = '['
+    array_end = '];'
+    function_start = '{'
+    function_end = '}'
+
+    def declare_array(self, linkage, typ, name, size):
+        if linkage:
+            linkage += ' '
+        typ = "stdint::%s" % typ
+        return '%s%s: [%s; %d]' % (linkage, name, typ, size)
+
+    def declare_function(self, linkage, retType, name, args):
+        if linkage:
+            linkage += ' '
+        retType = "stdint::%s" % retType
+        args = [
+            (
+                t if t[-1] != '*' else "&[%s]" % t[:-1],
+                n
+            )
+            for t, n in args
+        ]
+        args = ', '.join("%s: stdint::%s" % (n, t) for t, n in args)
+        return('%sfn %s (%s) -> %s' % (linkage, name, args, retType))
+
+
+languages = {
+    'c': LanguageC(),
+    'rust': LanguageRust(),
+}
+
+
 class Array:
     def __init__(self, typ):
         self.typ = typ
@@ -139,63 +231,13 @@ class Array:
         self.values.extend(values)
         return start
 
-    def print(self,
-              name,
-              print=print,
-              linkage=None,
-              language='c'):
-
-        if linkage is None:
-            linkage = {
-                'c': 'static const',
-                'rust': 'const',
-            }.get(language)
-        linkage = linkage or ''
-        if linkage:
-            linkage += ' '
-
-        print('%s%s' % (linkage, self.typ))
-        print('%s[%s] =' % (name, len(self.values)))
-        print('{')
-        w = max(len(str(v)) for v in self.values)
-        n = 1 << int(round(log2(78 / (w + 1))))
-        if (w + 2) * n <= 78:
-            w += 1
-        for i in range(0, len(self.values), n):
-            line = self.values[i:i+n]
-            print('  ' + ''.join('%*s,' % (w, v) for v in line))
-        print('};')
-
 
 class Function:
-    def __init__(self, linkage, retType, args, body):
-        self.linkage = linkage
+    def __init__(self, retType, args, body, *, private=True):
         self.retType = retType
         self.args = args
         self.body = body
-
-    def print(self,
-              name,
-              print=print,
-              language='c'):
-
-        linkage = self.linkage
-        if linkage is None:
-            linkage = {
-                'c': 'static inline',
-                'rust': '',
-            }.get(language)
-        linkage = linkage or ''
-        if linkage:
-            linkage += ' '
-
-        args = ', '.join(' '.join(p) for p in self.args)
-
-        print('%s%s' % (linkage, self.retType))
-        print('%s (%s)' % (name, args))
-        print('{')
-        print('  return %s;' % self.body)
-        print('}')
+        self.private = private
 
 
 class Code:
@@ -207,15 +249,15 @@ class Code:
     def nameFor(self, name):
         return '%s_%s' % (self.namespace, name)
 
-    def addFunction(self, linkage, retType, name, args, body):
+    def addFunction(self, retType, name, args, body, *, private=True):
         name = self.nameFor(name)
         if name in self.functions:
-            assert self.functions[name].linkage == linkage
             assert self.functions[name].retType == retType
             assert self.functions[name].args == args
             assert self.functions[name].body == body
+            assert self.functions[name].private == private
         else:
-            self.functions[name] = Function(linkage, retType, args, body)
+            self.functions[name] = Function(retType, args, body, private=private)
         return name
 
     def addArray(self, typ, name, values):
@@ -232,18 +274,21 @@ class Code:
                    linkage='',
                    indent=0,
                    language='c'):
-        if isinstance(indent, int): indent *= ' '
+        if isinstance(indent, int):
+            indent *= ' '
         printn = partial(print, file=file, sep='')
         println = partial(printn, indent)
 
+        language = languages[language]
+
         for name, array in self.arrays.items():
-            array.print(name, println, language=language)
+            language.print_array(name, array, print=println)
 
         if self.arrays and self.functions:
             printn()
 
         for name, function in self.functions.items():
-            function.print(name, println, language=language)
+            language.print_function(name, function, print=println)
 
     def print_c(self,
                 file=sys.stdout,
@@ -256,14 +301,16 @@ class Code:
                 linkage='',
                 indent=0):
         if linkage: linkage += ' '
-        if isinstance(indent, int): indent *= ' '
+        if isinstance(indent, int):
+            indent *= ' '
         printn = partial(print, file=file, sep='')
         println = partial(printn, indent)
 
-        for (link, ret, name, args), body in self.functions.items():
-            link = linkage if link is None else link+' '
-            args = ', '.join(' '.join(p) for p in args)
-            println('%s%s %s (%s);' % (linkage, ret, name, args))
+        for name, function in self.functions.items():
+            link = (linkage if function.linkage is None else function.linkage)+' '
+            args = ', '.join(' '.join(p) for p in function.args)
+            println('%s%s %s (%s);' % (linkage, function.retType, name, args))
+
 
 bytesPerOp = 4
 lookupOps = 4
@@ -407,10 +454,9 @@ class InnerSolution(Solution):
             shift2 = int(round(log2(unitBits)))
             mask2 = (1 << unitBits) - 1
             funcBody = '(a[i>>%s]>>((i&%du)<<%d))&%du' % (shift1, mask1, shift2, mask2)
-            funcName = code.addFunction ('static inline',
-                                         'unsigned',
+            funcName = code.addFunction ('unsigned',
                                          'b%s' % unitBits,
-                                         (('const uint8_t*', 'a'),
+                                         (('uint8_t*', 'a'),
                                           ('unsigned',       'i')),
                                          funcBody)
             expr = '%s(%s%s,%s)' % (funcName, start, arrName, index)
@@ -419,8 +465,7 @@ class InnerSolution(Solution):
         # Wrap up.
 
         if name:
-            funcName = code.addFunction (None,
-                                         retType,
+            funcName = code.addFunction (retType,
                                          name,
                                          (('unsigned', 'u'),),
                                          expr)
@@ -568,8 +613,7 @@ class OuterSolution(Solution):
                                 self.layer.default) # TODO Map default?
 
         if name:
-            funcName = code.addFunction (None,
-                                         retType,
+            funcName = code.addFunction (retType,
                                          name,
                                          (('unsigned', 'u'),),
                                          expr)
