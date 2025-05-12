@@ -249,6 +249,8 @@ class LanguageC(Language):
 
         assert False
 
+    def as_usize(self, expr):
+        return expr
 
 class LanguageRust(Language):
     name = "rust"
@@ -264,17 +266,17 @@ class LanguageRust(Language):
     usize = "usize"
 
     def print_preamble(self, *, print=print):
-        print("#![allow(non_upper_case_globals)]")
+        print("#[allow(non_upper_case_globals)]")
         print("")
 
     def cast(self, typ, expr):
-        return "(%s as %s)" % (expr, typ)
+        return "(%s) as %s" % (expr, typ)
 
     def borrow(self, name):
         return "&%s" % name
 
     def slice(self, name, start):
-        return "&%s[%d..]" % (name, start)
+        return "&%s[%s..]" % (name, start)
 
     def tertiary(self, cond, trueExpr, falseExpr):
         return "if %s { %s } else { %s }" % (cond, trueExpr, falseExpr)
@@ -327,6 +329,8 @@ class LanguageRust(Language):
 
         assert False
 
+    def as_usize(self, expr):
+        return "(%s as usize)" % expr
 
 languages = {
     "c": LanguageC(),
@@ -550,7 +554,7 @@ class InnerSolution(Solution):
         index = index0 + ("+" if index0 and index1 else "") + index1
         if unitBits >= 8:
             if start:
-                index = "%s+(%s)" % (start, index)
+                index = "(%s)+(%s)" % (language.as_usize(start), language.as_usize(index))
             expr = "%s[%s]" % (arrName, index)
         else:
             shift1 = int(round(log2(8 // unitBits)))
