@@ -152,7 +152,7 @@ class Language:
         decl = self.declare_array(linkage, array.typ, name, len(array.values))
         print(decl, "=")
         print(self.array_start)
-        w = max(len(str(v)) for v in array.values)
+        w = max((len(str(v)) for v in array.values), default=1)
         n = 1 << int(round(log2(78 / (w + 1))))
         if (w + 2) * n <= 78:
             w += 1
