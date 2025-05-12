@@ -526,7 +526,7 @@ class InnerSolution(Solution):
 
         # Generate expression.
 
-        start = str(start) + "+" if start else ""
+        start = str(start) if start else None
         if expr == "0":
             index0 = ""
         elif shift == 0:
