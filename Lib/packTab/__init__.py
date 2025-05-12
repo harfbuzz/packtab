@@ -150,7 +150,7 @@ class Language:
     def print_array(self, name, array, *, print=print, private=True):
         linkage = self.private_array_linkage if private else self.public_array_linkage
         decl = self.declare_array(linkage, array.typ, name, len(array.values))
-        print(decl)
+        print(decl, "=")
         print(self.array_start)
         w = max(len(str(v)) for v in array.values)
         n = 1 << int(round(log2(78 / (w + 1))))
@@ -184,6 +184,24 @@ class LanguageC(Language):
     array_end = "};"
     function_start = "{"
     function_end = "}"
+    u8 = "uint8_t"
+    usize = "unsigned"
+
+    def print_preamble(self, *, print=print):
+        print("#include <stdint.h>")
+        print()
+
+    def cast(self, typ, expr):
+        return "(%s)(%s)" % (typ, expr)
+
+    def borrow(self, name):
+        return "%s" % name
+
+    def slice(self, name, start):
+        return "%s+%s" % (name, start)
+
+    def tertiary(self, cond, trueExpr, falseExpr):
+        return "(%s ? %s : %s)" % (cond, trueExpr, falseExpr)
 
     def declare_array(self, linkage, typ, name, size):
         if linkage:
@@ -197,6 +215,34 @@ class LanguageC(Language):
         args = ", ".join(" ".join(p) for p in args)
         return "%s%s %s (%s)" % (linkage, retType, name, args)
 
+    def type_for(self, minV, maxV):
+        assert minV <= maxV
+
+        if type(minV) != int or type(maxV) != int:
+            return "uint8_t"
+
+        if 0 <= minV and maxV <= 255:
+            return "uint8_t"
+        if -128 <= minV and maxV <= 127:
+            return "int8_t"
+
+        if 0 <= minV and maxV <= 65535:
+            return "uint16_t"
+        if -32768 <= minV and maxV <= 32767:
+            return "int16_t"
+
+        if 0 <= minV and maxV <= 4294967295:
+            return "uint32_t"
+        if -2147483648 <= minV and maxV <= 2147483647:
+            return "int32_t"
+
+        if 0 <= minV and maxV <= 18446744073709551615:
+            return "uint64_t"
+        if -9223372036854775808 <= minV and maxV <= 9223372036854775807:
+            return "int64_t"
+
+        assert False
+
 
 class LanguageRust(Language):
     name = "rust"
@@ -208,20 +254,66 @@ class LanguageRust(Language):
     array_end = "];"
     function_start = "{"
     function_end = "}"
+    u8 = "u8"
+    usize = "usize"
+
+    def print_preamble(self, *, print=print):
+        print("#![allow(non_upper_case_globals)]")
+        print("")
+
+    def cast(self, typ, expr):
+        return "(%s as %s)" % (expr, typ)
+
+    def borrow(self, name):
+        return "&%s" % name
+
+    def slice(self, name, start):
+        return "&%s[%d..]" % (name, start)
+
+    def tertiary(self, cond, trueExpr, falseExpr):
+        return "if %s { %s } else { %s }" % (cond, trueExpr, falseExpr)
 
     def declare_array(self, linkage, typ, name, size):
         if linkage:
             linkage += " "
-        typ = "stdint::%s" % typ
+        typ = "%s" % typ
         return "%s%s: [%s; %d]" % (linkage, name, typ, size)
 
     def declare_function(self, linkage, retType, name, args):
         if linkage:
             linkage += " "
-        retType = "stdint::%s" % retType
+        retType = "%s" % retType
         args = [(t if t[-1] != "*" else "&[%s]" % t[:-1], n) for t, n in args]
-        args = ", ".join("%s: stdint::%s" % (n, t) for t, n in args)
+        args = ", ".join("%s: %s" % (n, t) for t, n in args)
         return "%sfn %s (%s) -> %s" % (linkage, name, args, retType)
+
+    def type_for(self, minV, maxV):
+        assert minV <= maxV
+
+        if type(minV) != int or type(maxV) != int:
+            return "u8"
+
+        if 0 <= minV and maxV <= 255:
+            return "u8"
+        if -128 <= minV and maxV <= 127:
+            return "i8"
+
+        if 0 <= minV and maxV <= 65535:
+            return "u16"
+        if -32768 <= minV and maxV <= 32767:
+            return "i16"
+
+        if 0 <= minV and maxV <= 4294967295:
+            return "u32"
+        if -2147483648 <= minV and maxV <= 2147483647:
+            return "i32"
+
+        if 0 <= minV and maxV <= 18446744073709551615:
+            return "u64"
+        if -9223372036854775808 <= minV and maxV <= 9223372036854775807:
+            return "i64"
+
+        assert False
 
 
 languages = {
@@ -285,6 +377,8 @@ class Code:
 
         language = languages[language]
 
+        language.print_preamble(print=println)
+
         for name, array in self.arrays.items():
             language.print_array(name, array, print=println)
 
@@ -295,7 +389,7 @@ class Code:
             language.print_function(name, function, print=println)
 
     def print_c(self, file=sys.stdout, linkage="", indent=0):
-        print_code(self, file, linkage, indent, language="c")
+        self.print_code(file=file, linkage=linkage, indent=indent, language="c")
 
     def print_h(self, file=sys.stdout, linkage="", indent=0):
         if linkage:
@@ -335,43 +429,18 @@ class Solution:
         )
 
 
-def typeFor(minV, maxV):
-    assert minV <= maxV
-
-    if type(minV) != int or type(maxV) != int:
-        return "uint8_t"
-
-    if 0 <= minV and maxV <= 255:
-        return "uint8_t"
-    if -128 <= minV and maxV <= 127:
-        return "int8_t"
-
-    if 0 <= minV and maxV <= 65535:
-        return "uint16_t"
-    if -32768 <= minV and maxV <= 32767:
-        return "int16_t"
-
-    if 0 <= minV and maxV <= 4294967295:
-        return "uint32_t"
-    if -2147483648 <= minV and maxV <= 2147483647:
-        return "int32_t"
-
-    if 0 <= minV and maxV <= 18446744073709551615:
-        return "uint64_t"
-    if -9223372036854775808 <= minV and maxV <= 9223372036854775807:
-        return "int64_t"
-
-    assert False
-
-
 def typeWidth(typ):
     """
     >>> typeWidth('int8_t')
     8
     >>> typeWidth('uint32_t')
     32
+    >>> typeWidth('i8')
+    8
+    >>> typeWidth('u32')
+    32
     """
-    return int(typ[typ.index("int") + 3 : -2])
+    return int("".join([c for c in typ if c.isdigit()]))
 
 
 def typeAbbr(typ):
@@ -387,11 +456,16 @@ def typeAbbr(typ):
 def fastType(typ):
     """
     >>> fastType('int8_t')
-    'int_fast8_t'
+    'int8_t'
     >>> fastType('uint32_t')
-    'uint_fast32_t'
+    'uint32_t'
+    >>> fastType('i8')
+    'i8'
+    >>> fastType('u32')
+    'u32'
     """
-    return typ.replace("int", "int_fast")
+    return typ
+    # return typ.replace("int", "int_fast")
 
 
 class InnerSolution(Solution):
@@ -399,13 +473,16 @@ class InnerSolution(Solution):
         Solution.__init__(self, layer, next, nLookups, nExtraOps, cost)
         self.bits = bits
 
-    def genCode(self, code, name=None, var="u"):
+    def genCode(self, code, name=None, var="u", language="c"):
         inputVar = var
         if name:
             var = "u"
         expr = var
 
-        typ = typeFor(self.layer.minV, self.layer.maxV)
+        if isinstance(language, str):
+            language = languages[language]
+
+        typ = language.type_for(self.layer.minV, self.layer.maxV)
         retType = fastType(typ)
         unitBits = self.layer.unitBits
         if not unitBits:
@@ -416,7 +493,9 @@ class InnerSolution(Solution):
         mask = (1 << shift) - 1
 
         if self.next:
-            (_, expr) = self.next.genCode(code, None, "%s>>%d" % (var, shift))
+            (_, expr) = self.next.genCode(
+                code, None, "%s>>%d" % (var, shift), language=language
+            )
 
         # Generate data.
 
@@ -454,30 +533,34 @@ class InnerSolution(Solution):
             index0 = str(expr)
         else:
             index0 = "((%s)<<%d)" % (expr, shift)
-        index1 = "((%s)&%du)" % (var, mask) if mask else ""
+        index1 = "((%s)&%s)" % (var, mask) if mask else ""
         index = index0 + ("+" if index0 and index1 else "") + index1
         if unitBits >= 8:
             if start:
-                index = "(%s)" % index
-            expr = "%s[%s%s]" % (arrName, start, index)
+                index = "%s+(%s)" % (start, index)
+            expr = "%s[%s]" % (arrName, index)
         else:
             shift1 = int(round(log2(8 // unitBits)))
             mask1 = (8 // unitBits) - 1
             shift2 = int(round(log2(unitBits)))
             mask2 = (1 << unitBits) - 1
-            funcBody = "(a[i>>%s]>>((i&%du)<<%d))&%du" % (shift1, mask1, shift2, mask2)
+            funcBody = "(a[i>>%s]>>((i&%s)<<%d))&%s" % (shift1, mask1, shift2, mask2)
             funcName = code.addFunction(
-                "unsigned",
+                language.u8,
                 "b%s" % unitBits,
-                (("uint8_t*", "a"), ("unsigned", "i")),
+                ((language.u8 + "*", "a"), (language.usize, "i")),
                 funcBody,
             )
-            expr = "%s(%s%s,%s)" % (funcName, start, arrName, index)
+            if start:
+                sliced_array = language.slice(arrName, start)
+            else:
+                sliced_array = language.borrow(arrName)
+            expr = "%s(%s,%s)" % (funcName, sliced_array, index)
 
         # Wrap up.
 
         if name:
-            funcName = code.addFunction(retType, name, (("unsigned", "u"),), expr)
+            funcName = code.addFunction(retType, name, ((language.u32, "u"),), expr)
             expr = "%s(%s)" % (funcName, inputVar)
 
         return (retType, expr)
@@ -519,7 +602,6 @@ class Layer:
 
 
 class InnerLayer(Layer):
-
     """
     A layer that can reproduce @data passed to its constructor, by
     using multiple lookup tables that split the domain by powers
@@ -599,13 +681,16 @@ class OuterSolution(Solution):
     def __init__(self, layer, next, nLookups, nExtraOps, cost):
         Solution.__init__(self, layer, next, nLookups, nExtraOps, cost)
 
-    def genCode(self, code, name=None, var="u"):
+    def genCode(self, code, name=None, var="u", language="c", private=True):
         inputVar = var
         if name:
             var = "u"
         expr = var
 
-        typ = typeFor(self.layer.minV, self.layer.maxV)
+        if isinstance(language, str):
+            language = languages[language]
+
+        typ = language.type_for(self.layer.minV, self.layer.maxV)
         retType = fastType(typ)
         unitBits = self.layer.unitBits
         if not unitBits:
@@ -614,24 +699,24 @@ class OuterSolution(Solution):
             return (retType, expr)
 
         if self.next:
-            (_, expr) = self.next.genCode(code, None, var)
+            (_, expr) = self.next.genCode(code, None, var, language=language)
 
         if self.layer.mult != 1:
             expr = "%d*%s" % (self.layer.mult, expr)
         if self.layer.bias != 0:
             if self.layer.bias < 0:
-                expr = "(%s) %s" % (retType, expr)
+                expr = language.cast(retType, expr)
             expr = "%d+%s" % (self.layer.bias, expr)
 
-        expr = "%s<%du?%s:%s" % (
-            var,
-            len(self.layer.data),
-            expr,
-            self.layer.default,
-        )  # TODO Map default?
+        expr = language.tertiary(
+            "%s<%s" % (var, len(self.layer.data)), expr, self.layer.default
+        )
+        # TODO Map default?
 
         if name:
-            funcName = code.addFunction(retType, name, (("unsigned", "u"),), expr)
+            funcName = code.addFunction(
+                retType, name, ((language.usize, "u"),), expr, private=private
+            )
             expr = "%s(%s)" % (funcName, inputVar)
 
         return (retType, expr)
@@ -664,7 +749,6 @@ def gcd(lst):
 
 
 class OuterLayer(Layer):
-
     """
     A layer that can reproduce @data passed to its constructor, by
     simple arithmetic tricks to reduce its size.

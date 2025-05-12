@@ -55,7 +55,7 @@ def main(args=sys.argv):
     solution = pack_table(data, default, compression=compression)
 
     code = Code("data")
-    expr = solution.genCode(code, "get")
+    expr = solution.genCode(code, "get", language=language, private=False)
     code.print_code(language=language)
 
     return 0
