@@ -266,8 +266,7 @@ class LanguageRust(Language):
     usize = "usize"
 
     def print_preamble(self, *, print=print):
-        print("#[allow(non_upper_case_globals)]")
-        print("")
+        pass
 
     def cast(self, typ, expr):
         return "(%s) as %s" % (expr, typ)
@@ -330,6 +329,8 @@ class LanguageRust(Language):
         assert False
 
     def as_usize(self, expr):
+        if not expr:
+            return ''
         return "(%s as usize)" % expr
 
 languages = {
@@ -551,7 +552,7 @@ class InnerSolution(Solution):
         else:
             index0 = "((%s)<<%d)" % (expr, shift)
         index1 = "((%s)&%s)" % (var, mask) if mask else ""
-        index = index0 + ("+" if index0 and index1 else "") + index1
+        index = language.as_usize(index0) + ("+" if index0 and index1 else "") + language.as_usize(index1)
         if unitBits >= 8:
             if start:
                 index = "(%s)+(%s)" % (language.as_usize(start), language.as_usize(index))
