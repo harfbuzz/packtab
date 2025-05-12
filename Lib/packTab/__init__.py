@@ -201,7 +201,7 @@ class LanguageC(Language):
         return "%s+%s" % (name, start)
 
     def tertiary(self, cond, trueExpr, falseExpr):
-        return "(%s ? %s : %s)" % (cond, trueExpr, falseExpr)
+        return "%s ? %s : %s" % (cond, trueExpr, falseExpr)
 
     def declare_array(self, linkage, typ, name, size):
         if linkage:
