@@ -215,6 +215,12 @@ class LanguageC(Language):
         args = ", ".join(" ".join(p) for p in args)
         return "%s%s %s (%s)" % (linkage, retType, name, args)
 
+    def type_name(self, typ):
+        assert typ[0] in "iu"
+        signed = "" if typ[0] == "i" else "u"
+        size = typeWidth(typ)
+        return "%sint%s_t" % (signed, size)
+
     def type_for(self, minV, maxV):
         assert minV <= maxV
 
@@ -286,6 +292,12 @@ class LanguageRust(Language):
         args = [(t if t[-1] != "*" else "&[%s]" % t[:-1], n) for t, n in args]
         args = ", ".join("%s: %s" % (n, t) for t, n in args)
         return "%sfn %s (%s) -> %s" % (linkage, name, args, retType)
+
+    def type_name(self, typ):
+        assert typ[0] in "iu"
+        signed = typ[0]
+        size = typeWidth(typ)
+        return "%s%s" % (signed, size)
 
     def type_for(self, minV, maxV):
         assert minV <= maxV
@@ -375,7 +387,8 @@ class Code:
         printn = partial(print, file=file, sep="")
         println = partial(printn, indent)
 
-        language = languages[language]
+        if isinstance(language, str):
+            language = languages[language]
 
         language.print_preamble(print=println)
 
