@@ -557,7 +557,7 @@ class InnerSolution(Solution):
         elif shift == 0:
             index0 = str(expr)
         else:
-            index0 = "((%s)<<%d)" % (expr, shift)
+            index0 = "((%s)<<%d)" % (language.as_usize(expr), shift)
         index1 = "((%s)&%s)" % (var, mask) if mask else ""
         index = language.as_usize(index0) + ("+" if index0 and index1 else "") + language.as_usize(index1)
         if unitBits >= 8:
