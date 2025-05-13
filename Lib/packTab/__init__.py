@@ -173,6 +173,11 @@ class Language:
         print("  return %s;" % function.body)
         print(self.function_end)
 
+    def usize_literal(self, value):
+        if value == '':
+            return ''
+        return "%s%s" % (value, self.usize_suffix)
+
 
 class LanguageC(Language):
     name = "c"
@@ -186,6 +191,7 @@ class LanguageC(Language):
     function_end = "}"
     u8 = "uint8_t"
     usize = "unsigned"
+    usize_suffix = "u"
 
     def print_preamble(self, *, print=print):
         print("#include <stdint.h>")
@@ -264,6 +270,7 @@ class LanguageRust(Language):
     function_end = "}"
     u8 = "u8"
     usize = "usize"
+    usize_suffix = "usize"
 
     def print_preamble(self, *, print=print):
         pass
@@ -386,7 +393,7 @@ class Code:
         start = array.extend(values)
         return name, start
 
-    def print_code(self, *, file=sys.stdout, linkage="", indent=0, language="c"):
+    def print_code(self, *, file=sys.stdout, private=True, indent=0, language="c"):
         if isinstance(indent, int):
             indent *= " "
         printn = partial(print, file=file, sep="")
@@ -398,7 +405,7 @@ class Code:
         language.print_preamble(print=println)
 
         for name, array in self.arrays.items():
-            language.print_array(name, array, print=println)
+            language.print_array(name, array, print=println, private=private)
 
         if self.arrays and self.functions:
             printn()
@@ -406,8 +413,8 @@ class Code:
         for name, function in self.functions.items():
             language.print_function(name, function, print=println)
 
-    def print_c(self, file=sys.stdout, linkage="", indent=0):
-        self.print_code(file=file, linkage=linkage, indent=indent, language="c")
+    def print_c(self, file=sys.stdout, indent=0):
+        self.print_code(file=file, indent=indent, language="c")
 
     def print_h(self, file=sys.stdout, linkage="", indent=0):
         if linkage:
@@ -544,7 +551,7 @@ class InnerSolution(Solution):
 
         # Generate expression.
 
-        start = str(start) if start else None
+        start = language.usize_literal(start) if start else None
         if expr == "0":
             index0 = ""
         elif shift == 0:
@@ -555,7 +562,7 @@ class InnerSolution(Solution):
         index = language.as_usize(index0) + ("+" if index0 and index1 else "") + language.as_usize(index1)
         if unitBits >= 8:
             if start:
-                index = "(%s)+(%s)" % (language.as_usize(start), language.as_usize(index))
+                index = "%s+(%s)" % (start, language.as_usize(index))
             expr = "%s[%s]" % (arrName, index)
         else:
             shift1 = int(round(log2(8 // unitBits)))
