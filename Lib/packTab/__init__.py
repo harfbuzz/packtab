@@ -341,7 +341,16 @@ class LanguageRust(Language):
     def as_usize(self, expr):
         if not expr:
             return ''
-        return "(%s as usize)" % expr
+        try:
+            int(expr)
+            return "%susize" % expr
+        except ValueError:
+            # Assume expr is a variable or expression that evaluates to an integer.
+            # Rust requires explicit casting to usize.
+            if expr.startswith('(') and expr.endswith(')'):
+                return "%s as usize" % expr
+            else:
+                return "(%s) as usize" % expr
 
     def return_stmt(self, expr):
         return expr
