@@ -170,7 +170,7 @@ class Language:
         decl = self.declare_function(linkage, function.retType, name, function.args)
         print(decl)
         print(self.function_start)
-        print("  return %s;" % function.body)
+        print("  %s" % self.return_stmt(function.body))
         print(self.function_end)
 
     def usize_literal(self, value):
@@ -258,9 +258,12 @@ class LanguageC(Language):
     def as_usize(self, expr):
         return expr
 
+    def return_stmt(self, expr):
+        return "return %s;" % expr
+
 class LanguageRust(Language):
     name = "rust"
-    private_array_linkage = "const"
+    private_array_linkage = "static"
     public_array_linkage = "pub const"
     private_function_linkage = ""
     public_function_linkage = "pub"
@@ -339,6 +342,9 @@ class LanguageRust(Language):
         if not expr:
             return ''
         return "(%s as usize)" % expr
+
+    def return_stmt(self, expr):
+        return expr
 
 languages = {
     "c": LanguageC(),
@@ -562,7 +568,7 @@ class InnerSolution(Solution):
         index = language.as_usize(index0) + ("+" if index0 and index1 else "") + language.as_usize(index1)
         if unitBits >= 8:
             if start:
-                index = "%s+(%s)" % (start, language.as_usize(index))
+                index = "%s+%s" % (start, language.as_usize(index))
             expr = "%s[%s]" % (arrName, index)
         else:
             shift1 = int(round(log2(8 // unitBits)))
