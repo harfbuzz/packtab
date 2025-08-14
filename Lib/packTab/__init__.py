@@ -578,7 +578,7 @@ class InnerSolution(Solution):
         if unitBits >= 8:
             if start:
                 index = "%s+%s" % (start, language.as_usize(index))
-            expr = "%s[%s]" % (arrName, index)
+            expr = "unsafe { *(%s.get_unchecked(%s)) }" % (arrName, index)
         else:
             shift1 = int(round(log2(8 // unitBits)))
             mask1 = (8 // unitBits) - 1
