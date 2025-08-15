@@ -534,7 +534,7 @@ class InnerSolution(Solution):
 
         if self.next:
             (_, expr) = self.next.genCode(
-                code, None, "%s>>%d" % (var, shift), language=language
+                code, None, "((%s)>>%d)" % (var, shift), language=language
             )
 
         # Generate data.
