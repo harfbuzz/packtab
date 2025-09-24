@@ -264,9 +264,9 @@ class LanguageC(Language):
 class LanguageRust(Language):
     name = "rust"
     private_array_linkage = "static"
-    public_array_linkage = "pub const"
+    public_array_linkage = "pub(crate) static"
     private_function_linkage = ""
-    public_function_linkage = "pub"
+    public_function_linkage = "pub(crate)"
     array_start = "["
     array_end = "];"
     function_start = "{"
