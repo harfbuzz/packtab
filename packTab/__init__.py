@@ -640,7 +640,7 @@ class InnerSolution(Solution):
         Solution.__init__(self, layer, next, nLookups, nExtraOps, cost)
         self.bits = bits
 
-    def genCode(self, code, name=None, var="u", language="c"):
+    def genCode(self, code, name=None, var="u", language="c", data_multiplier=1):
         """Generate lookup code for this solution level.
 
         Recursively generates code for child levels (``self.next``),
@@ -677,10 +677,23 @@ class InnerSolution(Solution):
         shift = self.bits
         mask = (1 << shift) - 1
 
+        # Check if we can bake in the shift: pre-multiply the child's
+        # stored values by (1 << shift) so the runtime shift is eliminated.
+        # This works when the pre-shifted max still fits in the same
+        # sub-byte bucket (e.g., maxV=31 shifted by 3 → 248, still 8-bit).
+        bake_shift = False
+        if self.next and shift > 0:
+            child_maxV = self.next.layer.maxV
+            child_unitBits = self.next.layer.unitBits
+            if child_maxV * (1 << shift) < (1 << child_unitBits):
+                bake_shift = True
+
         # Recurse into the child level (higher bits of the index).
         if self.next:
+            child_multiplier = (1 << shift) if bake_shift else 1
             (_, expr) = self.next.genCode(
-                code, None, "((%s)>>%d)" % (var, shift), language=language
+                code, None, "((%s)>>%d)" % (var, shift), language=language,
+                data_multiplier=child_multiplier,
             )
 
         # Reconstruct the flat data for this level by expanding the
@@ -707,6 +720,11 @@ class InnerSolution(Solution):
             for d in range(layer.maxV + 1):
                 _expand(d, layers, len(layers) - 1, data)
 
+        # Apply data_multiplier from parent: pre-scale values so the
+        # parent can skip its shift operation.
+        if data_multiplier > 1:
+            data = [v * data_multiplier for v in data]
+
         # Pack sub-byte values: multiple 1/2/4-bit items per byte.
         data = _combine(data, self.layer.unitBits)
 
@@ -721,12 +739,14 @@ class InnerSolution(Solution):
 
         # Build the index expression.  For a multi-level solution:
         #   index = (child_expr << shift) | (var & mask)
+        # If shift was baked into child's data:
+        #   index = child_expr + (var & mask)
         # For a single-level solution (shift == 0): index = var.
 
         if expr == "0":
             index0 = ""
-        elif shift == 0:
-            index0 = str(expr)
+        elif shift == 0 or bake_shift:
+            index0 = language.as_usize(expr)
         else:
             index0 = "((%s)<<%d)" % (language.as_usize(expr), shift)
         index1 = "((%s)&%s)" % (var, mask) if mask else ""
