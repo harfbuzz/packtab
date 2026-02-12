@@ -71,7 +71,7 @@ on the `compression` parameter.
 ## Testing
 
 ```bash
-pytest packTab/test.py
+pytest
 ```
 
 ## History
