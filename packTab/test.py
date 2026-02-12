@@ -833,6 +833,17 @@ class TestEndToEnd:
         code = _generate(data, language=language)
         _compile_and_run(code, data, 0, language)
 
+    def test_byte_sharing(self, language):
+        """Data that triggers byte sharing (overlapping expansion blocks)."""
+        data = [ord(c) % 256 for c in "The quick brown fox jumps over the lazy dog. " * 50]
+        code = _generate(data, language=language)
+        # Verify byte sharing was used: offset array should be present.
+        if language == "c":
+            assert "data_off" in code
+        elif language == "rust":
+            assert "data_off" in code
+        _compile_and_run(code, data, 0, language)
+
 
 class TestEndToEndRust:
     """Rust-specific code generation checks."""
