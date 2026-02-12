@@ -882,7 +882,9 @@ class InnerLayer(Layer):
 
         self.maxV = max(data)
         self.minV = min(data)
-        # TODO When to check minV is zero?  Enforce if unitBits < 8
+        # Note: minV need not be zero even when unitBits < 8 (sub-byte packing).
+        # OuterLayer ensures data is non-negative before passing to InnerLayer,
+        # and binaryBitsFor() correctly handles ranges like [1..4] → 4 bits.
         self.unitBits = binaryBitsFor(self.minV, self.maxV)
         self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
         self.bytes = ceil(self.unitBits * len(self.data) / 8)
