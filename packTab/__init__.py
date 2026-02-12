@@ -378,7 +378,10 @@ class LanguageRust(Language):
 
     def print_function(self, name, function, *, print=print):
         # Add #[inline] attribute for better optimization hints
-        print("#[inline]")
+        if function.inline_always:
+            print("#[inline(always)]")
+        else:
+            print("#[inline]")
         # Call parent implementation
         super().print_function(name, function, print=print)
 
@@ -470,11 +473,12 @@ class Array:
 class Function:
     """A generated inline function with a single-expression body."""
 
-    def __init__(self, retType, args, body, *, private=True):
+    def __init__(self, retType, args, body, *, private=True, inline_always=False):
         self.retType = retType
         self.args = args
         self.body = body
         self.private = private
+        self.inline_always = inline_always
 
 
 class Code:
@@ -508,6 +512,7 @@ class Code:
         body: str,
         *,
         private: bool = True,
+        inline_always: bool = False,
     ) -> str:
         name = self.nameFor(name)
         if name in self.functions:
@@ -515,8 +520,11 @@ class Code:
             assert self.functions[name].args == args
             assert self.functions[name].body == body
             assert self.functions[name].private == private
+            assert self.functions[name].inline_always == inline_always
         else:
-            self.functions[name] = Function(retType, args, body, private=private)
+            self.functions[name] = Function(
+                retType, args, body, private=private, inline_always=inline_always
+            )
         return name
 
     def addArray(self, typ: str, name: str, values: List[Any]) -> Tuple[str, int]:
@@ -836,6 +844,7 @@ class InnerSolution(Solution):
                 "b%s" % unitBits,
                 ((language.u8 + "*", "a"), (language.usize, "i")),
                 funcBody,
+                inline_always=True,
             )
             if start:
                 sliced_array = language.slice(arrName, start)
