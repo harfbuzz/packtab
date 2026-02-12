@@ -487,8 +487,13 @@ class TestOuterLayer:
         assert layer.bias == 100 or layer.mult > 1
 
     def test_gcd_optimization(self):
+        # mult gets baked in when undivided data fits in same type
         layer = OuterLayer([0, 10, 20, 30], 0)
-        assert layer.mult == 10
+        assert layer.mult == 1  # baked in: [0,10,20,30] fits in uint8_t
+
+        # mult kept when baking in would enlarge the type
+        layer = OuterLayer([0, 128, 256, 384], 0)
+        assert layer.mult == 128  # 384 needs uint16_t, 3 fits in uint8_t
 
     def test_has_solutions(self):
         layer = OuterLayer([1, 2, 3], 0)
@@ -712,6 +717,49 @@ class TestInlining:
     def test_inline_rust_uses_typed_literal(self):
         code = _generate([1, 2, 3, 4], language="rust")
         assert "228u8" in code
+
+
+class TestMultBakeIn:
+    """Verify that width multiplier is baked in when type doesn't change."""
+
+    def test_bake_in_small_gcd(self):
+        """GCD data where undivided values still fit in same C type."""
+        data = [0, 4, 8, 12]
+        layer = OuterLayer(data, 0)
+        assert layer.mult == 1  # baked in
+
+    def test_no_bake_in_type_change(self):
+        """GCD data where undivided values need a larger type."""
+        data = [0, 128, 256, 384]
+        layer = OuterLayer(data, 0)
+        assert layer.mult == 128
+
+    def test_bake_in_no_mult_in_code(self):
+        code = _generate([0, 6, 12, 18], language="c")
+        assert "6*" not in code
+        assert "data_get" in code
+
+    def test_no_bake_in_has_mult_in_code(self):
+        code = _generate([0, 128, 256, 384], language="c")
+        assert "128*" in code
+
+    def test_bake_in_e2e_c(self):
+        """End-to-end: GCD data where multiplier is baked in."""
+        data = [0, 6, 12, 18, 24, 30]
+        code = _generate(data, language="c")
+        TestEndToEndC._compile_and_run(code, data, 0)
+
+    def test_no_bake_in_e2e_c(self):
+        """End-to-end: GCD data where multiplier is NOT baked in."""
+        data = [0, 128, 256, 384]
+        code = _generate(data, language="c")
+        TestEndToEndC._compile_and_run(code, data, 0)
+
+    def test_bake_in_with_bias_e2e_c(self):
+        """End-to-end: bias + GCD where multiplier is baked in."""
+        data = [100, 106, 112, 118]
+        code = _generate(data, language="c")
+        TestEndToEndC._compile_and_run(code, data, 0)
 
 
 class TestEndToEndBothLanguages:

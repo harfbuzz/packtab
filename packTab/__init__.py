@@ -13,8 +13,6 @@
 # limitations under the License.
 
 # TODO:
-# - Bake in width multiplier into array data if doing so doesn't enlarge
-#   data type.  Again, that would save ops.
 # - Currently we only cull array of defaults at the end.  Do it at
 #   beginning as well, and adjust split code to find optimum shift.
 # - Byte reuse!  Much bigger work item.
@@ -840,13 +838,23 @@ class OuterLayer(Layer):
             data = [(d - bias) // mult for d in self.data]
             default = (self.default - bias) // mult
 
+            # Bake in width multiplier if doing so doesn't enlarge data type.
+            if mult > 1:
+                undivided = [(d - bias) for d in self.data]
+                divided_type_width = max(8, binaryBitsFor(min(data), max(data)))
+                undivided_type_width = max(8, binaryBitsFor(min(undivided), max(undivided)))
+                if undivided_type_width <= divided_type_width:
+                    data = undivided
+                    unitBits = binaryBitsFor(min(undivided), max(undivided))
+                    mult = 1
+
         self.unitBits = unitBits
         self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
         self.bias = bias
         if bias:
             self.extraOps += 1
         self.mult = mult
-        if mult:
+        if mult != 1:
             self.extraOps += 1
 
         self.bytes = ceil(self.unitBits * len(self.data) / 8)
