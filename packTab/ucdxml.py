@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from __future__ import print_function, division, absolute_import
-from lxml import etree, objectify
+from lxml import etree, objectify  # noqa: F401
 import zipfile
 
 __all__ = [

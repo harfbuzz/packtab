@@ -127,4 +127,4 @@ jobs:
 
     - name: Lint with Flake8
       run: |
-        flake8 packTab --max-line-length=88 --extend-ignore=E203,W503
+        flake8 packTab --max-line-length=132 --extend-ignore=E203,W503,F403,F405

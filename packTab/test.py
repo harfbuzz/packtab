@@ -27,7 +27,7 @@ from packTab import (
     InnerSolution,
     OuterSolution,
 )
-from packTab.__main__ import main
+from packTab.__main__ import main  # noqa: F401
 
 
 # ── Utility functions ──────────────────────────────────────────────

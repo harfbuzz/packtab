@@ -89,7 +89,7 @@ import sys
 import collections
 from math import ceil, log2
 from functools import partial
-from typing import Union, List, Dict, Optional, Any, Iterable, Tuple, TextIO
+from typing import Union, List, Dict, Optional, Any, Tuple, TextIO
 
 
 __all__ = [
@@ -576,7 +576,7 @@ class Code:
         for name, function in self.functions.items():
             link = (linkage if function.linkage is None else function.linkage) + " "
             args = ", ".join(" ".join(p) for p in function.args)
-            println("%s%s %s (%s);" % (linkage, function.retType, name, args))
+            println("%s%s %s (%s);" % (link, function.retType, name, args))
 
 
 # Cost model constants.  These tune the tradeoff between table size
@@ -1292,8 +1292,8 @@ def pack_table(
 
     # Set up mapping.  See docstring.
     if mapping is not None:
-        # assert (all(isinstance(k, int) and not isinstance(v, int) for k,v in mapping.items()) or
-        #        all(not isinstance(k, int) and isinstance(v, int) for k,v in mapping.items()))
+        # assert (all(isinstance(k, int) and not isinstance(v, int) for k,v in mapping.items()) or  # noqa: E501
+        #        all(not isinstance(k, int) and isinstance(v, int) for k,v in mapping.items()))  # noqa: E501
         mapping2 = mapping.copy()
         for k, v in mapping.items():
             mapping2[v] = k

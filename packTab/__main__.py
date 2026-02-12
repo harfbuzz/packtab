@@ -25,7 +25,10 @@ def main(args=None):
     parser.add_argument(
         "data",
         nargs="*",
-        help="integer data values to pack, or index:value pairs with --sparse (reads from stdin if not provided)",
+        help=(
+            "integer data values to pack, or index:value pairs with --sparse "
+            "(reads from stdin if not provided)"
+        ),
     )
     parser.add_argument(
         "--language",
@@ -50,9 +53,13 @@ def main(args=None):
     )
     parser.add_argument(
         "--compression",
-        type=float,
-        default=1,
-        help="size vs speed tradeoff; higher = smaller tables (default: 1)",
+        type=str,
+        default="1",
+        help=(
+            "size vs speed tradeoff; higher = smaller tables (default: 1). "
+            "For C: use '1,9' to generate both variants with "
+            "#ifdef __OPTIMIZE_SIZE__"
+        ),
     )
     parser.add_argument(
         "--optimize-size",
@@ -142,7 +149,24 @@ def main(args=None):
 
     # Handle --optimize-size shortcut
     if parsed.optimize_size:
-        parsed.compression = 9
+        parsed.compression = "9"
+
+    # Parse compression value(s)
+    compression_values = []
+    try:
+        for val in parsed.compression.split(","):
+            compression_values.append(float(val.strip()))
+    except ValueError as e:
+        parser.error(f"invalid compression value: {e}")
+
+    # Validate dual-compression (C-only for now)
+    if len(compression_values) > 1:
+        if len(compression_values) != 2:
+            parser.error("compression can have at most 2 values (e.g., '1,9')")
+        if language != "c":
+            parser.error(
+                "dual compression (e.g., '1,9') is only supported for C output"
+            )
 
     if parsed.analyze:
         # Get all Pareto-optimal solutions for analysis
@@ -167,14 +191,16 @@ def main(args=None):
         print("=" * 70)
         print(f"Original data: {original_size} values, range [{minV}..{maxV}]")
         print(
-            f"Original storage: {bits_needed} bits/value, {original_bytes} bytes total"
+            f"Original storage: {bits_needed} bits/value, "
+            f"{original_bytes} bytes total"
         )
         print(f"Default value: {parsed.default}")
         print()
         print(f"Found {len(solutions)} Pareto-optimal solutions:")
         print()
         print(
-            f"{'#':<3} {'Lookups':<8} {'ExtraOps':<9} {'Bytes':<6} {'FullCost':<8} {'Ratio':<7} {'Score':<8}"
+            f"{'#':<3} {'Lookups':<8} {'ExtraOps':<9} {'Bytes':<6} "
+            f"{'FullCost':<8} {'Ratio':<7} {'Score':<8}"
         )
         print("-" * 70)
 
@@ -196,7 +222,7 @@ def main(args=None):
         if chosen.cost > 0:
             print(f"  Compression ratio: {original_bytes/chosen.cost:.2f}x")
         else:
-            print(f"  Compression ratio: ∞ (computed inline, no storage)")
+            print("  Compression ratio: ∞ (computed inline, no storage)")
 
         return 0
 
