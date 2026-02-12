@@ -149,7 +149,8 @@ def binaryBitsFor(minV, maxV):
     if type(minV) != int or type(maxV) != int:
         return 8
 
-    assert minV <= maxV
+    if minV > maxV:
+        raise ValueError("minV (%d) > maxV (%d)" % (minV, maxV))
 
     if 0 <= minV and maxV <= 0:
         return 0
@@ -180,7 +181,7 @@ def binaryBitsFor(minV, maxV):
     if -9223372036854775808 <= minV and maxV <= 9223372036854775807:
         return 64
 
-    assert False
+    raise ValueError("values out of range: [%d, %d]" % (minV, maxV))
 
 
 class Language:
@@ -290,8 +291,6 @@ class LanguageC(Language):
         return "%sint%s_t" % (signed, size)
 
     def type_for(self, minV, maxV):
-        assert minV <= maxV
-
         if type(minV) != int or type(maxV) != int:
             return "uint8_t"
 
@@ -315,7 +314,7 @@ class LanguageC(Language):
         if -9223372036854775808 <= minV and maxV <= 9223372036854775807:
             return "int64_t"
 
-        assert False
+        raise ValueError("values out of range: [%d, %d]" % (minV, maxV))
 
     def uint_literal(self, value, typ):
         if "64" in typ:
@@ -378,8 +377,6 @@ class LanguageRust(Language):
         return "%s%s" % (signed, size)
 
     def type_for(self, minV, maxV):
-        assert minV <= maxV
-
         if type(minV) != int or type(maxV) != int:
             return "u8"
 
@@ -403,7 +400,7 @@ class LanguageRust(Language):
         if -9223372036854775808 <= minV and maxV <= 9223372036854775807:
             return "i64"
 
-        assert False
+        raise ValueError("values out of range: [%d, %d]" % (minV, maxV))
 
     def as_usize(self, expr):
         if not expr:
@@ -1233,10 +1230,12 @@ def pack_table(data, default=0, compression=1, mapping=None):
 
     # Set up data as a list.
     if isinstance(data, dict):
-        assert all(isinstance(k, int) for k, v in data.items())
+        if not all(isinstance(k, int) for k in data.keys()):
+            raise TypeError("dict keys must be integers")
         minK = min(data.keys())
         maxK = max(data.keys())
-        assert minK >= 0
+        if minK < 0:
+            raise ValueError("dict keys must be non-negative")
         data2 = [default] * (maxK + 1)
         for k, v in data.items():
             data2[k] = v
@@ -1244,9 +1243,11 @@ def pack_table(data, default=0, compression=1, mapping=None):
         del data2
 
     # Convert all to integers
-    assert all(isinstance(v, int) for v in data) or all(
-        not isinstance(v, int) for v in data
-    )
+    if not (
+        all(isinstance(v, int) for v in data)
+        or all(not isinstance(v, int) for v in data)
+    ):
+        raise TypeError("data values must be all integers or all non-integers")
     if not isinstance(data[0], int) and mapping is not None:
         data = [mapping[v] for v in data]
     if not isinstance(default, int) and mapping is not None:
