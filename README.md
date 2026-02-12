@@ -76,7 +76,6 @@ pytest packTab/test.py
 
 ## TODO
 
-- Reduce code duplication between Inner/Outer genCode().
 - Bake in width multiplier into array data if doing so doesn't enlarge
   data type.  Again, that would save ops.
 - If an array is not larger than 64 bits, inline it in code directly

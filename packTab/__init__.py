@@ -38,8 +38,6 @@
 # of data tables.
 #
 # TODO:
-# - Reduce code duplication between Inner/Outer genCode().
-# - Handle empty data array.
 # - Bake in width multiplier into array data if doing so doesn't enlarge
 #   data type.  Again, that would save ops.
 # - If an array is not larger than 64 bits, inline it in code directly
