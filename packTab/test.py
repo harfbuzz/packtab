@@ -525,7 +525,6 @@ class TestPackTable:
         solution = pack_table(["A", "B", "C", "A"], default="A", mapping=mapping)
         assert isinstance(solution, (InnerSolution, OuterSolution))
 
-    @pytest.mark.xfail(reason="known bug: all values equal to default empties the array")
     def test_constant_data(self):
         solution = pack_table([7, 7, 7, 7], default=7)
         assert isinstance(solution, (InnerSolution, OuterSolution))
@@ -643,7 +642,6 @@ class TestEndToEndC:
         code = _generate(data, language="c")
         self._compile_and_run(code, data, 0)
 
-    @pytest.mark.xfail(reason="known bug: constant data triggers division by zero in OuterLayer")
     def test_constant_nonzero(self):
         data = [42, 42, 42, 42]
         code = _generate(data, default=0, language="c")

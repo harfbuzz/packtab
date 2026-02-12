@@ -670,12 +670,14 @@ class InnerLayer(Layer):
         self.bytes = ceil(self.unitBits * len(self.data) / 8)
 
         if self.maxV == 0:
+            solution = InnerSolution(self, None, 0, 0, 0)
+            self.solutions.append(solution)
             return
 
         self.split()
 
         solution = InnerSolution(
-            self, None, 0 if self.maxV == 0 else 1, self.extraOps, self.bytes
+            self, None, 1, self.extraOps, self.bytes
         )
         self.solutions.append(solution)
 
@@ -743,12 +745,6 @@ class OuterSolution(Solution):
 
         typ = language.type_for(self.layer.minV, self.layer.maxV)
         retType = fastType(typ)
-        unitBits = self.layer.unitBits
-        if not unitBits:
-            assert False  # Audit this branch
-            expr = self.layer.data[0]
-            return (retType, expr)
-
         if self.next:
             (_, expr) = self.next.genCode(code, None, var, language=language)
 
@@ -807,7 +803,7 @@ class OuterLayer(Layer):
 
     def __init__(self, data, default):
         data = list(data)
-        while data[-1] == default:
+        while len(data) > 1 and data[-1] == default:
             data.pop()
         Layer.__init__(self, data)
         self.default = default
@@ -833,6 +829,8 @@ class OuterLayer(Layer):
 
             if b:
                 m = gcd(d - b for d in data)
+                if m == 0:
+                    m = 1
                 candidateBits = binaryBitsFor(0, (self.maxV - b) // m)
                 if unitBits > candidateBits:
                     unitBits = candidateBits
