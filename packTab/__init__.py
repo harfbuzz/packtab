@@ -92,7 +92,14 @@ from functools import partial
 from typing import Union, List, Dict, Optional, Any, Iterable, Tuple, TextIO
 
 
-__all__ = ["Code", "pack_table", "pick_solution", "languages", "languageClasses", "binaryBitsFor"]
+__all__ = [
+    "Code",
+    "pack_table",
+    "pick_solution",
+    "languages",
+    "languageClasses",
+    "binaryBitsFor",
+]
 
 __version__ = "0.4.0"
 
@@ -226,8 +233,8 @@ class Language:
         return "%s[%s]" % (name, index)
 
     def usize_literal(self, value):
-        if value == '':
-            return ''
+        if value == "":
+            return ""
         return "%s%s" % (value, self.usize_suffix)
 
     def wrapping_add(self, a, b):
@@ -325,6 +332,7 @@ class LanguageC(Language):
     def return_stmt(self, expr):
         return "return %s;" % expr
 
+
 class LanguageRust(Language):
     name = "rust"
     private_array_linkage = "static"
@@ -408,14 +416,14 @@ class LanguageRust(Language):
 
     def as_usize(self, expr):
         if not expr:
-            return ''
+            return ""
         try:
             int(expr)
             return "%susize" % expr
         except ValueError:
             # Assume expr is a variable or expression that evaluates to an integer.
             # Rust requires explicit casting to usize.
-            if expr.startswith('(') and expr.endswith(')'):
+            if expr.startswith("(") and expr.endswith(")"):
                 return "%s as usize" % expr
             else:
                 return "(%s) as usize" % expr
@@ -436,6 +444,7 @@ class LanguageRust(Language):
 
     def return_stmt(self, expr):
         return expr
+
 
 languageClasses = {
     "c": LanguageC,
@@ -498,7 +507,7 @@ class Code:
         args: Tuple[Tuple[str, str], ...],
         body: str,
         *,
-        private: bool = True
+        private: bool = True,
     ) -> str:
         name = self.nameFor(name)
         if name in self.functions:
@@ -524,7 +533,7 @@ class Code:
         file: TextIO = sys.stdout,
         private: bool = True,
         indent: Union[int, str] = 0,
-        language: Union[str, "Language"] = "c"
+        language: Union[str, "Language"] = "c",
     ) -> None:
         if isinstance(indent, int):
             indent *= " "
@@ -714,7 +723,10 @@ class InnerSolution(Solution):
         if self.next:
             child_multiplier = (1 << shift) if bake_shift else 1
             (_, expr) = self.next.genCode(
-                code, None, "((%s)>>%d)" % (var, shift), language=language,
+                code,
+                None,
+                "((%s)>>%d)" % (var, shift),
+                language=language,
                 data_multiplier=child_multiplier,
             )
 
@@ -754,7 +766,9 @@ class InnerSolution(Solution):
         # inline it as a constant instead of emitting an array.
         # Non-integer data (string identifiers) and negative values cannot
         # be inlined (negative values would produce invalid unsigned literals).
-        can_inline = len(data) * 8 <= 64 and all(isinstance(v, int) and v >= 0 for v in data)
+        can_inline = len(data) * 8 <= 64 and all(
+            isinstance(v, int) and v >= 0 for v in data
+        )
 
         if not can_inline:
             arrName, start = code.addArray(typ, typeAbbr(typ), data)
@@ -772,7 +786,11 @@ class InnerSolution(Solution):
         else:
             index0 = "((%s)<<%d)" % (language.as_usize(expr), shift)
         index1 = "((%s)&%s)" % (var, mask) if mask else ""
-        index = language.as_usize(index0) + ("+" if index0 and index1 else "") + language.as_usize(index1)
+        index = (
+            language.as_usize(index0)
+            + ("+" if index0 and index1 else "")
+            + language.as_usize(index1)
+        )
 
         # Emit the lookup expression, choosing between three strategies:
         if can_inline:
@@ -807,7 +825,12 @@ class InnerSolution(Solution):
             mask1 = (8 // unitBits) - 1
             shift2 = int(round(log2(unitBits)))
             mask2 = (1 << unitBits) - 1
-            funcBody = "(%s>>((i&%s)<<%d))&%s" % (language.array_index("a", "i>>%s" % shift1), mask1, shift2, mask2)
+            funcBody = "(%s>>((i&%s)<<%d))&%s" % (
+                language.array_index("a", "i>>%s" % shift1),
+                mask1,
+                shift2,
+                mask2,
+            )
             funcName = code.addFunction(
                 language.u8,
                 "b%s" % unitBits,
@@ -918,9 +941,7 @@ class InnerLayer(Layer):
 
         self.split()
 
-        solution = InnerSolution(
-            self, None, 1, self.extraOps, self.bytes
-        )
+        solution = InnerSolution(self, None, 1, self.extraOps, self.bytes)
         self.solutions.append(solution)
 
         bits = 1
@@ -1008,10 +1029,12 @@ class OuterSolution(Solution):
             expr = language.wrapping_add(language.cast(retType, var), expr)
             if self.layer.bias > 0:
                 expr = language.wrapping_add(
-                    language.uint_literal(self.layer.bias, retType), expr)
+                    language.uint_literal(self.layer.bias, retType), expr
+                )
             elif self.layer.bias < 0:
                 expr = language.wrapping_sub(
-                    expr, language.uint_literal(-self.layer.bias, retType))
+                    expr, language.uint_literal(-self.layer.bias, retType)
+                )
         else:
             if self.layer.bias > 0:
                 expr = "%d+%s" % (self.layer.bias, expr)
@@ -1177,7 +1200,9 @@ class OuterLayer(Layer):
             if mult > 1:
                 undivided = [(d - bias) for d in base]
                 divided_type_width = max(8, binaryBitsFor(min(data), max(data)))
-                undivided_type_width = max(8, binaryBitsFor(min(undivided), max(undivided)))
+                undivided_type_width = max(
+                    8, binaryBitsFor(min(undivided), max(undivided))
+                )
                 if undivided_type_width <= divided_type_width:
                     data = undivided
                     unitBits = binaryBitsFor(min(undivided), max(undivided))
@@ -1300,7 +1325,9 @@ def pack_table(
     return pick_solution(solutions, compression)
 
 
-def pick_solution(solutions: List["OuterSolution"], compression: float = 1) -> "OuterSolution":
+def pick_solution(
+    solutions: List["OuterSolution"], compression: float = 1
+) -> "OuterSolution":
     """Select the best solution from the Pareto frontier.
 
     Args:

@@ -231,24 +231,23 @@ class TestLanguageC:
         assert self.c.tertiary("x<10", "a", "b") == "x<10 ? a : b"
 
     def test_declare_array(self):
-        assert self.c.declare_array("static const", "uint8_t", "tbl", 4) == \
-            "static const uint8_t tbl[4]"
+        assert (
+            self.c.declare_array("static const", "uint8_t", "tbl", 4)
+            == "static const uint8_t tbl[4]"
+        )
 
     def test_declare_array_no_linkage(self):
-        assert self.c.declare_array("", "uint8_t", "tbl", 4) == \
-            "uint8_t tbl[4]"
+        assert self.c.declare_array("", "uint8_t", "tbl", 4) == "uint8_t tbl[4]"
 
     def test_declare_function(self):
         result = self.c.declare_function(
-            "static inline", "uint8_t", "lookup",
-            (("unsigned", "u"),)
+            "static inline", "uint8_t", "lookup", (("unsigned", "u"),)
         )
         assert result == "static inline uint8_t lookup (unsigned u)"
 
     def test_declare_function_pointer_arg(self):
         result = self.c.declare_function(
-            "", "uint8_t", "f",
-            (("uint8_t*", "a"), ("unsigned", "i"))
+            "", "uint8_t", "f", (("uint8_t*", "a"), ("unsigned", "i"))
         )
         assert "const uint8_t*" in result
 
@@ -267,7 +266,7 @@ class TestLanguageC:
 
     def test_usize_literal(self):
         assert self.c.usize_literal(10) == "10u"
-        assert self.c.usize_literal('') == ''
+        assert self.c.usize_literal("") == ""
 
     def test_preamble(self):
         buf = io.StringIO()
@@ -308,25 +307,19 @@ class TestLanguageRust:
         assert self.rs.slice("arr", "5") == "&arr[5..]"
 
     def test_tertiary(self):
-        assert self.rs.tertiary("x<10", "a", "b") == \
-            "if x<10 { a } else { b }"
+        assert self.rs.tertiary("x<10", "a", "b") == "if x<10 { a } else { b }"
 
     def test_declare_array(self):
-        assert self.rs.declare_array("static", "u8", "tbl", 4) == \
-            "static tbl: [u8; 4]"
+        assert self.rs.declare_array("static", "u8", "tbl", 4) == "static tbl: [u8; 4]"
 
     def test_declare_function(self):
         result = self.rs.declare_function(
-            "pub(crate)", "u8", "lookup",
-            (("usize", "u"),)
+            "pub(crate)", "u8", "lookup", (("usize", "u"),)
         )
         assert result == "pub(crate) fn lookup (u: usize) -> u8"
 
     def test_declare_function_slice_arg(self):
-        result = self.rs.declare_function(
-            "", "u8", "f",
-            (("u8*", "a"), ("usize", "i"))
-        )
+        result = self.rs.declare_function("", "u8", "f", (("u8*", "a"), ("usize", "i")))
         assert "&[u8]" in result
 
     def test_array_index_safe(self):
@@ -334,8 +327,7 @@ class TestLanguageRust:
 
     def test_array_index_unsafe(self):
         rs = LanguageRust(unsafe_array_access=True)
-        assert rs.array_index("arr", "i") == \
-            "unsafe { *(arr.get_unchecked(i)) }"
+        assert rs.array_index("arr", "i") == "unsafe { *(arr.get_unchecked(i)) }"
 
     def test_as_usize_empty(self):
         assert self.rs.as_usize("") == ""
@@ -589,16 +581,16 @@ def _compile_and_run_c(c_code, data, default):
     """Compile generated C and verify every index returns the right value."""
     checks = []
     for i, v in enumerate(data):
-        checks.append('  assert(data_get(%d) == %d);' % (i, v))
+        checks.append("  assert(data_get(%d) == %d);" % (i, v))
     for i in range(len(data), len(data) + 5):
-        checks.append('  assert(data_get(%d) == %d);' % (i, default))
+        checks.append("  assert(data_get(%d) == %d);" % (i, default))
 
     full = (
-        '#include <assert.h>\n'
-        '#include <stdio.h>\n'
+        "#include <assert.h>\n"
+        "#include <stdio.h>\n"
         + c_code
-        + '\nint main() {\n'
-        + '\n'.join(checks)
+        + "\nint main() {\n"
+        + "\n".join(checks)
         + '\n  printf("PASS\\n");\n  return 0;\n}\n'
     )
 
@@ -607,8 +599,10 @@ def _compile_and_run_c(c_code, data, default):
         src = f.name
     out = src.replace(".c", "")
     try:
-        subprocess.check_call(["cc", "-o", out, src, "-std=c99", "-Wall", "-Werror"],
-                              stderr=subprocess.PIPE)
+        subprocess.check_call(
+            ["cc", "-o", out, src, "-std=c99", "-Wall", "-Werror"],
+            stderr=subprocess.PIPE,
+        )
         result = subprocess.check_output([out]).decode().strip()
         assert result == "PASS"
     finally:
@@ -621,15 +615,15 @@ def _compile_and_run_rust(rs_code, data, default):
     """Compile generated Rust and verify every index returns the right value."""
     checks = []
     for i, v in enumerate(data):
-        checks.append('    assert_eq!(data_get(%d) as i64, %di64);' % (i, v))
+        checks.append("    assert_eq!(data_get(%d) as i64, %di64);" % (i, v))
     for i in range(len(data), len(data) + 5):
-        checks.append('    assert_eq!(data_get(%d) as i64, %di64);' % (i, default))
+        checks.append("    assert_eq!(data_get(%d) as i64, %di64);" % (i, default))
 
     full = (
-        '#[allow(dead_code, unused_parens, overflowing_literals)]\n\n'
+        "#[allow(dead_code, unused_parens, overflowing_literals)]\n\n"
         + rs_code
-        + '\nfn main() {\n'
-        + '\n'.join(checks)
+        + "\nfn main() {\n"
+        + "\n".join(checks)
         + '\n    println!("PASS");\n}\n'
     )
 
@@ -638,8 +632,7 @@ def _compile_and_run_rust(rs_code, data, default):
         src = f.name
     out = src.replace(".rs", "")
     try:
-        subprocess.check_call(["rustc", "-o", out, src],
-                              stderr=subprocess.PIPE)
+        subprocess.check_call(["rustc", "-o", out, src], stderr=subprocess.PIPE)
         result = subprocess.check_output([out]).decode().strip()
         assert result == "PASS"
     finally:
@@ -781,7 +774,9 @@ class TestEndToEndRust:
         assert "unsafe" not in code
 
     def test_unsafe_has_get_unchecked(self):
-        code = _generate([i * 7 % 256 for i in range(256)], language="rust", unsafe_array_access=True)
+        code = _generate(
+            [i * 7 % 256 for i in range(256)], language="rust", unsafe_array_access=True
+        )
         assert "get_unchecked" in code
         assert "unsafe" in code
 
@@ -941,7 +936,8 @@ class TestCLI:
     def _run(self, *args):
         result = subprocess.run(
             [sys.executable, "-m", "packTab", *args],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         return result
 

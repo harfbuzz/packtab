@@ -23,8 +23,9 @@ def main(args=None):
         description="Pack a list of integers into compact lookup tables.",
     )
     parser.add_argument(
-        "data", nargs="*",
-        help="integer data values to pack, or index:value pairs with --sparse (reads from stdin if not provided)"
+        "data",
+        nargs="*",
+        help="integer data values to pack, or index:value pairs with --sparse (reads from stdin if not provided)",
     )
     parser.add_argument(
         "--language",
@@ -74,6 +75,7 @@ def main(args=None):
     # Read data from stdin if not provided on command line
     if not parsed.data:
         import sys
+
         stdin_text = sys.stdin.read().strip()
         if not stdin_text:
             parser.error("no data provided (either as arguments or via stdin)")
@@ -85,9 +87,9 @@ def main(args=None):
         sparse_dict = {}
         try:
             for item in parsed.data:
-                if ':' not in item:
+                if ":" not in item:
                     parser.error(f"--sparse requires 'index:value' format, got: {item}")
-                index_str, value_str = item.split(':', 1)
+                index_str, value_str = item.split(":", 1)
                 index = int(index_str)
                 value = int(value_str)
                 if index < 0:
@@ -114,9 +116,7 @@ def main(args=None):
 
     if parsed.analyze:
         # Get all Pareto-optimal solutions for analysis
-        solutions = pack_table(
-            parsed.data, parsed.default, compression=None
-        )
+        solutions = pack_table(parsed.data, parsed.default, compression=None)
 
         # Handle both list and dict input
         if isinstance(parsed.data, dict):
@@ -136,25 +136,33 @@ def main(args=None):
         print("Compression Analysis")
         print("=" * 70)
         print(f"Original data: {original_size} values, range [{minV}..{maxV}]")
-        print(f"Original storage: {bits_needed} bits/value, {original_bytes} bytes total")
+        print(
+            f"Original storage: {bits_needed} bits/value, {original_bytes} bytes total"
+        )
         print(f"Default value: {parsed.default}")
         print()
         print(f"Found {len(solutions)} Pareto-optimal solutions:")
         print()
-        print(f"{'#':<3} {'Lookups':<8} {'ExtraOps':<9} {'Bytes':<6} {'FullCost':<8} {'Ratio':<7} {'Score':<8}")
+        print(
+            f"{'#':<3} {'Lookups':<8} {'ExtraOps':<9} {'Bytes':<6} {'FullCost':<8} {'Ratio':<7} {'Score':<8}"
+        )
         print("-" * 70)
 
         for i, sol in enumerate(solutions):
-            ratio = original_bytes / sol.cost if sol.cost > 0 else float('inf')
+            ratio = original_bytes / sol.cost if sol.cost > 0 else float("inf")
             score = sol.nLookups + parsed.compression * (sol.fullCost.bit_length() - 1)
-            print(f"{i+1:<3} {sol.nLookups:<8} {sol.nExtraOps:<9} {sol.cost:<6} {sol.fullCost:<8} {ratio:>6.2f}x {score:>7.1f}")
+            print(
+                f"{i+1:<3} {sol.nLookups:<8} {sol.nExtraOps:<9} {sol.cost:<6} {sol.fullCost:<8} {ratio:>6.2f}x {score:>7.1f}"
+            )
 
         print()
         # Highlight the chosen solution for the current compression parameter
         chosen = pick_solution(solutions, parsed.compression)
         chosen_idx = solutions.index(chosen)
         print(f"Best solution for compression={parsed.compression}: #{chosen_idx+1}")
-        print(f"  {chosen.nLookups} lookups, {chosen.nExtraOps} extra ops, {chosen.cost} bytes")
+        print(
+            f"  {chosen.nLookups} lookups, {chosen.nExtraOps} extra ops, {chosen.cost} bytes"
+        )
         if chosen.cost > 0:
             print(f"  Compression ratio: {original_bytes/chosen.cost:.2f}x")
         else:
@@ -163,9 +171,7 @@ def main(args=None):
         return 0
 
     # Normal code generation path
-    solution = pack_table(
-        parsed.data, parsed.default, compression=parsed.compression
-    )
+    solution = pack_table(parsed.data, parsed.default, compression=parsed.compression)
 
     lang = languageClasses[language](unsafe_array_access=parsed.unsafe)
 
