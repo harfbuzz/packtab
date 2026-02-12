@@ -805,6 +805,61 @@ class TestBiasBakeIn:
         TestEndToEndC._compile_and_run(code, data, 0)
 
 
+class TestStringData:
+    """Verify that string data without a mapping stores identifiers verbatim."""
+
+    def test_string_values_verbatim_in_array(self):
+        """String values should appear as C identifiers in the generated array."""
+        data = ["CAT_A", "CAT_B", "CAT_C", "CAT_A"]
+        solution = pack_table(data, default="CAT_NONE", compression=1)
+        code = Code("test")
+        solution.genCode(code, "lookup", language="c", private=False)
+        out = io.StringIO()
+        code.print_code(file=out, language="c")
+        output = out.getvalue()
+        # Strings should appear verbatim as C identifiers, not as integer IDs
+        assert "CAT_A" in output
+        assert "CAT_B" in output
+        assert "CAT_C" in output
+        assert "CAT_NONE" in output
+
+    def test_string_default_in_ternary(self):
+        """The string default should appear in the ternary expression."""
+        data = ["X", "Y"]
+        solution = pack_table(data, default="Z", compression=1)
+        code = Code("test")
+        solution.genCode(code, "lookup", language="c", private=False)
+        out = io.StringIO()
+        code.print_code(file=out, language="c")
+        output = out.getvalue()
+        assert "Z" in output
+
+    def test_string_with_mapping(self):
+        """String data with an explicit mapping should produce integer code."""
+        mapping = {"CAT_A": 0, "CAT_B": 1, "CAT_C": 2}
+        data = ["CAT_A", "CAT_B", "CAT_C", "CAT_A"]
+        solution = pack_table(data, default="CAT_A", compression=1, mapping=mapping)
+        code = Code("test")
+        solution.genCode(code, "lookup", language="c", private=False)
+        out = io.StringIO()
+        code.print_code(file=out, language="c")
+        output = out.getvalue()
+        # With a mapping, strings should be converted to their integer values
+        assert "CAT_A" not in output
+
+    def test_string_no_inline(self):
+        """Small string data should NOT be inlined (can't bit-pack identifiers)."""
+        data = ["A", "B"]
+        solution = pack_table(data, default="C", compression=1)
+        code = Code("test")
+        solution.genCode(code, "lookup", language="c", private=False)
+        out = io.StringIO()
+        code.print_code(file=out, language="c")
+        output = out.getvalue()
+        # Should have an array, not an inlined constant
+        assert "u8[" in output or "u8 " in output
+
+
 class TestEndToEndBothLanguages:
     """Verify that the same input produces valid output in both languages."""
 

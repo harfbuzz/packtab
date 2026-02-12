@@ -709,11 +709,7 @@ class InnerSolution(Solution):
 
         data = []
         if not layers:
-            mapping = layer.mapping
-            if isinstance(layer.data[0], int):
-                data.extend(layer.data)
-            else:
-                data.extend(mapping[d] for d in layer.data)
+            data.extend(layer.data)
         else:
             assert layer.minV == 0
             for d in range(layer.maxV + 1):
@@ -724,7 +720,8 @@ class InnerSolution(Solution):
 
         # If the packed data fits in a single integer (<= 64 bits),
         # inline it as a constant instead of emitting an array.
-        can_inline = len(data) * 8 <= 64
+        # Non-integer data (string identifiers) cannot be inlined.
+        can_inline = len(data) * 8 <= 64 and all(isinstance(v, int) for v in data)
 
         if not can_inline:
             arrName, start = code.addArray(typ, typeAbbr(typ), data)
@@ -977,7 +974,6 @@ class OuterSolution(Solution):
         expr = language.tertiary(
             "%s<%s" % (var, len(self.layer.data)), expr, self.layer.default
         )
-        # TODO Map default?
 
         if name:
             funcName = code.addFunction(
