@@ -783,7 +783,7 @@ class InnerSolution(Solution):
 
         # If this is the top-level named function, wrap the expression.
         if name:
-            funcName = code.addFunction(retType, name, ((language.u32, "u"),), expr)
+            funcName = code.addFunction(retType, name, ((language.usize, "u"),), expr)
             expr = "%s(%s)" % (funcName, inputVar)
 
         return (retType, expr)
