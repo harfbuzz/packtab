@@ -720,8 +720,9 @@ class InnerSolution(Solution):
 
         # If the packed data fits in a single integer (<= 64 bits),
         # inline it as a constant instead of emitting an array.
-        # Non-integer data (string identifiers) cannot be inlined.
-        can_inline = len(data) * 8 <= 64 and all(isinstance(v, int) for v in data)
+        # Non-integer data (string identifiers) and negative values cannot
+        # be inlined (negative values would produce invalid unsigned literals).
+        can_inline = len(data) * 8 <= 64 and all(isinstance(v, int) and v >= 0 for v in data)
 
         if not can_inline:
             arrName, start = code.addArray(typ, typeAbbr(typ), data)
@@ -1150,8 +1151,10 @@ class OuterLayer(Layer):
                     unitBits = binaryBitsFor(min(undivided), max(undivided))
                     mult = 1
 
-            # Bake in bias if doing so doesn't enlarge the C integer type.
-            if bias != 0 and mult == 1:
+            # Bake in bias if doing so doesn't enlarge the C integer type
+            # and doesn't introduce negative values (which would change
+            # signedness and break sub-byte packing / inlining).
+            if bias != 0 and mult == 1 and min(base) >= 0:
                 current_type_width = max(8, binaryBitsFor(min(data), max(data)))
                 base_type_width = max(8, binaryBitsFor(min(base), max(base)))
                 if base_type_width <= current_type_width:

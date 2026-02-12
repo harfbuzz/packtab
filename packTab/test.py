@@ -838,6 +838,12 @@ class TestIdentity:
         code = _generate(data, language="c")
         assert "u+" in code
 
+    def test_identity_negative_deltas_e2e_c(self):
+        """Negative deltas (data[i] < i) must not produce negative unsigned literals."""
+        data = [0, 1, 2, 3, 5, 4, 6, 7]  # swapped 4↔5, delta at 5 is -1
+        code = _generate(data, language="c")
+        TestEndToEndC._compile_and_run(code, data, 0)
+
     def test_identity_e2e_c(self):
         """End-to-end: identity-like data produces correct results."""
         data = list(range(64))
