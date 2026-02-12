@@ -1145,3 +1145,57 @@ class TestEdgeCases:
         """Empty mapping should raise ValueError."""
         with pytest.raises(ValueError, match="empty"):
             pack_table([1, 2, 3], default=0, mapping={})
+
+
+class TestCacheOptimization:
+    """Test frequency-based chunk sorting for cache locality."""
+
+    def test_frequent_pairs_get_lower_ids(self):
+        """More frequent pairs should get lower IDs."""
+        # Pattern: (1,2) appears 3 times, (3,4) appears 2 times, (5,6) appears 1 time
+        data = [1, 2, 1, 2, 1, 2, 3, 4, 3, 4, 5, 6]
+        layer = InnerLayer(data)
+
+        # Check that pairs are assigned IDs by frequency
+        id_12 = layer.mapping[(1, 2)]
+        id_34 = layer.mapping[(3, 4)]
+        id_56 = layer.mapping[(5, 6)]
+
+        # (1,2) most frequent -> lowest ID
+        # (3,4) second -> middle ID
+        # (5,6) least frequent -> highest ID
+        assert id_12 < id_34 < id_56
+
+    def test_equal_frequency_sorted_by_position(self):
+        """For equal frequency, earlier position gets lower ID."""
+        # All pairs appear once, so order by position
+        data = [1, 2, 3, 4, 5, 6, 7, 8]
+        layer = InnerLayer(data)
+
+        id_12 = layer.mapping[(1, 2)]
+        id_34 = layer.mapping[(3, 4)]
+        id_56 = layer.mapping[(5, 6)]
+        id_78 = layer.mapping[(7, 8)]
+
+        # All have frequency 1, so order by position
+        assert id_12 < id_34 < id_56 < id_78
+
+    def test_mixed_frequency_and_position(self):
+        """Hybrid: sort by frequency, then position."""
+        # (1,2) appears 2 times at positions 0,2
+        # (3,4) appears 2 times at positions 1,3
+        # (5,6) appears 1 time at position 4
+        data = [1, 2, 3, 4, 1, 2, 3, 4, 5, 6]
+        layer = InnerLayer(data)
+
+        id_12 = layer.mapping[(1, 2)]
+        id_34 = layer.mapping[(3, 4)]
+        id_56 = layer.mapping[(5, 6)]
+
+        # (1,2) and (3,4) both appear twice, so sorted by position
+        # (1,2) appears first (position 0) -> lower ID than (3,4) (position 1)
+        assert id_12 < id_34
+
+        # (5,6) appears once -> highest ID
+        assert id_56 > id_12
+        assert id_56 > id_34

@@ -976,11 +976,34 @@ class InnerLayer(Layer):
         Pad to even length, then map each pair (a, b) to a unique
         integer ID.  The resulting half-length array of IDs becomes
         the data for the next (child) InnerLayer.
+
+        Pairs are assigned IDs based on frequency (most common pairs
+        get lower IDs) for better cache locality. Position is used as
+        a tiebreaker for pairs with equal frequency.
         """
         if len(self.data) & 1:
             self.data.append(0)
 
+        # Collect pairs with frequencies and first occurrence positions
+        from collections import Counter
+        pairs = [(self.data[i], self.data[i + 1]) for i in range(0, len(self.data), 2)]
+        pair_freq = Counter(pairs)
+        first_occurrence = {}
+        for i, pair in enumerate(pairs):
+            if pair not in first_occurrence:
+                first_occurrence[pair] = i
+
+        # Sort unique pairs by frequency (descending), then position (ascending)
+        unique_pairs = sorted(
+            pair_freq.keys(), key=lambda p: (-pair_freq[p], first_occurrence[p])
+        )
+
+        # Create mapping with IDs assigned in sorted order
         mapping = self.mapping = AutoMapping()
+        for pair in unique_pairs:
+            mapping[pair]  # Assigns next sequential ID
+
+        # Apply mapping to create child layer data
         data2 = _combine2(self.data, lambda a, b: mapping[(a, b)])
 
         self.next = InnerLayer(data2)
