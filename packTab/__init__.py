@@ -93,7 +93,7 @@ from functools import partial
 
 __all__ = ["Code", "pack_table", "pick_solution", "languages", "languageClasses"]
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 
 class AutoMapping(collections.defaultdict):
