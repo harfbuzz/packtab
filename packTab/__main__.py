@@ -107,8 +107,6 @@ def main(args=None):
             parser.error(f"no data in input file: {parsed.input}")
     elif not parsed.data:
         # Read from stdin
-        import sys
-
         stdin_text = sys.stdin.read().strip()
         if not stdin_text:
             parser.error("no data provided (use positional args, -i, or stdin)")
@@ -227,19 +225,42 @@ def main(args=None):
         return 0
 
     # Normal code generation path
-    solution = pack_table(parsed.data, parsed.default, compression=compression_values[0])
-
     lang = languageClasses[language](unsafe_array_access=parsed.unsafe)
 
-    code = Code(parsed.name)
-    solution.genCode(code, "get", language=lang, private=False)
+    # Determine output file
+    output_file = open(parsed.output, "w") if parsed.output else sys.stdout
 
-    # Handle output file
-    if parsed.output:
-        with open(parsed.output, "w") as f:
-            code.print_code(language=lang, file=f)
-    else:
-        code.print_code(language=lang)
+    try:
+        if len(compression_values) == 1:
+            # Single compression - generate normally
+            solution = pack_table(parsed.data, parsed.default, compression=compression_values[0])
+            code = Code(parsed.name)
+            solution.genCode(code, "get", language=lang, private=False)
+            code.print_code(language=lang, file=output_file)
+        else:
+            # Dual compression - generate both with #ifdef
+            solution_speed = pack_table(parsed.data, parsed.default, compression=compression_values[0])
+            solution_size = pack_table(parsed.data, parsed.default, compression=compression_values[1])
+
+            code_speed = Code(parsed.name)
+            solution_speed.genCode(code_speed, "get", language=lang, private=False)
+
+            code_size = Code(parsed.name)
+            solution_size.genCode(code_size, "get", language=lang, private=False)
+
+            # Print with #ifdef wrapper
+            print("#ifdef __OPTIMIZE_SIZE__", file=output_file)
+            print(file=output_file)
+            code_size.print_code(language=lang, file=output_file)
+            print(file=output_file)
+            print("#else  /* optimize for speed */", file=output_file)
+            print(file=output_file)
+            code_speed.print_code(language=lang, file=output_file)
+            print(file=output_file)
+            print("#endif", file=output_file)
+    finally:
+        if parsed.output:
+            output_file.close()
 
     return 0
 

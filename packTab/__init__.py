@@ -151,7 +151,7 @@ def binaryBitsFor(minV, maxV):
     8
     """
 
-    if type(minV) != int or type(maxV) != int:
+    if not isinstance(minV, int) or not isinstance(maxV, int):
         return 8
 
     if minV > maxV:
@@ -296,7 +296,7 @@ class LanguageC(Language):
         return "%sint%s_t" % (signed, size)
 
     def type_for(self, minV, maxV):
-        if type(minV) != int or type(maxV) != int:
+        if not isinstance(minV, int) or not isinstance(maxV, int):
             return "uint8_t"
 
         if 0 <= minV and maxV <= 255:
@@ -392,7 +392,7 @@ class LanguageRust(Language):
         return "%s%s" % (signed, size)
 
     def type_for(self, minV, maxV):
-        if type(minV) != int or type(maxV) != int:
+        if not isinstance(minV, int) or not isinstance(maxV, int):
             return "u8"
 
         if 0 <= minV and maxV <= 255:
@@ -1180,7 +1180,7 @@ class OuterLayer(Layer):
         bias = 0
         mult = 1
         unitBits = binaryBitsFor(self.minV, self.maxV)
-        if type(self.minV) == int and type(self.maxV) == int:
+        if isinstance(self.minV, int) and isinstance(self.maxV, int):
             unitBits, bias, mult = _best_reduction(data, self.minV, self.maxV)
 
             # Try identity subtraction: store data[i] - i instead.
@@ -1230,7 +1230,7 @@ class OuterLayer(Layer):
 
         self.unitBits = unitBits
         self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
-        self.identity = identity if type(self.minV) == int else False
+        self.identity = identity if isinstance(self.minV, int) else False
         if self.identity:
             self.extraOps += 1
         self.bias = bias
