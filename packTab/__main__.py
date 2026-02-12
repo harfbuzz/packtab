@@ -55,6 +55,11 @@ def main(args=None):
         help="size vs speed tradeoff; higher = smaller tables (default: 1)",
     )
     parser.add_argument(
+        "--optimize-size",
+        action="store_true",
+        help="shortcut for --compression 9 (maximum size optimization)",
+    )
+    parser.add_argument(
         "--name",
         default="data",
         help="namespace prefix for generated symbols (default: data)",
@@ -120,6 +125,10 @@ def main(args=None):
             parser.error("no data provided")
 
     language = "rust" if parsed.rust else parsed.language
+
+    # Handle --optimize-size shortcut
+    if parsed.optimize_size:
+        parsed.compression = 9
 
     if parsed.analyze:
         # Get all Pareto-optimal solutions for analysis
