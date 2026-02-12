@@ -13,8 +13,6 @@
 # limitations under the License.
 
 # TODO:
-# - Currently we only cull array of defaults at the end.  Do it at
-#   beginning as well, and adjust split code to find optimum shift.
 # - Byte reuse!  Much bigger work item.
 
 """
@@ -155,6 +153,9 @@ class Language:
 
     def uint_literal(self, value, typ):
         return str(value)
+
+    def wrapping_sub(self, a, b):
+        return "(%s-%s)" % (a, b)
 
 
 class LanguageC(Language):
@@ -342,6 +343,9 @@ class LanguageRust(Language):
 
     def uint_literal(self, value, typ):
         return "%d%s" % (value, typ)
+
+    def wrapping_sub(self, a, b):
+        return "%s.wrapping_sub(%s)" % (a, b)
 
     def return_stmt(self, expr):
         return expr
@@ -737,10 +741,14 @@ class OuterSolution(Solution):
         inputVar = var
         if name:
             var = "u"
-        expr = var
 
         if isinstance(language, str):
             language = languages[language]()
+
+        if self.layer.shift:
+            var = language.wrapping_sub(var, language.usize_literal(self.layer.shift))
+
+        expr = var
 
         typ = language.type_for(self.layer.minV, self.layer.maxV)
         retType = fastType(typ)
@@ -804,8 +812,17 @@ class OuterLayer(Layer):
         data = list(data)
         while len(data) > 1 and data[-1] == default:
             data.pop()
+        # Trim leading defaults, but round down to a power of two so the
+        # remaining data stays aligned with the binary splitting.
+        leading = 0
+        while leading < len(data) - 1 and data[leading] == default:
+            leading += 1
+        shift = (1 << (leading.bit_length() - 1)) if leading > 0 else 0
+        if shift:
+            data = data[shift:]
         Layer.__init__(self, data)
         self.default = default
+        self.shift = shift
 
         self.minV, self.maxV = min(data), max(data)
 
