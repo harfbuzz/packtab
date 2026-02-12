@@ -13,8 +13,6 @@
 # limitations under the License.
 
 # TODO:
-# - Currently we only cull array of defaults at the end.  Do it at
-#   beginning as well, and adjust split code to find optimum shift.
 # - Byte reuse!  Much bigger work item.
 
 """
