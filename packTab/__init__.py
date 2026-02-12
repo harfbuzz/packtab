@@ -17,6 +17,75 @@
 
 """
 Pack a static table of integers into compact lookup tables to save space.
+
+Overview
+--------
+
+Given a flat array of integer values (e.g. Unicode character properties
+indexed by codepoint), this module compresses it into a set of smaller
+arrays plus a lookup function that reconstructs any original value.
+
+The core idea is a multi-level table decomposition.  A single flat
+lookup ``table[index]`` is replaced by a chain of smaller lookups:
+
+    level2[level1[level0[index >> K] + (index & mask)]]
+
+Each level splits the index domain by a power of two, so the split
+point is always a bit-shift / bit-mask operation (no division).
+
+The algorithm has two layers:
+
+**OuterLayer** — applies arithmetic reductions *before* splitting:
+  - **Bias subtraction**: if all values >= B, subtract B and add it
+    back in the generated code (``B + lookup(u)``).
+  - **GCD factoring**: if all values share a common factor M, divide
+    them out and multiply back (``M * lookup(u)``).
+  - **Combined bias + GCD**: subtract bias first, then divide by GCD.
+  - **Mult bake-in**: if after dividing by M the values still fit in
+    the same C integer type, store the undivided values instead and
+    skip the runtime multiplication.
+
+  These reductions can shrink the value range enough to fit values in
+  fewer bits, enabling tighter sub-byte packing downstream.
+
+**InnerLayer** — the recursive binary splitting engine:
+  - Takes the (possibly reduced) data array.
+  - Considers every possible split: use the data as-is (1 lookup), or
+    split the index in half (shift by 1 bit), grouping adjacent pairs
+    into a second-level table.  Pairs of values become entries in a
+    mapping; the second level stores mapping indices.
+  - Splitting recurses: the second-level table can itself be split,
+    producing 3-level, 4-level, etc. solutions.
+  - This is done via dynamic programming: each InnerLayer builds all
+    its solutions from the solutions of its child layer.
+
+**Sub-byte packing**: when values fit in 1, 2, or 4 bits, multiple
+values are packed into each byte of the storage array.  A helper
+function extracts elements with shift-and-mask.
+
+**Inlining**: when the packed data fits in <= 64 bits (8 bytes), the
+array is replaced by a single integer constant with inline bit
+extraction: ``(CONSTANT >> (index << shift)) & mask``.
+
+**Cost model**: each solution tracks ``nLookups`` (number of table
+indirections), ``nExtraOps`` (bias/mult/sub-byte ops), and ``cost``
+(total bytes of table storage).  ``fullCost`` combines them into a
+single metric.  Dominated solutions (worse on both axes) are pruned,
+keeping only the Pareto frontier.  The ``compression`` parameter
+controls the size-vs-speed tradeoff when picking a final solution.
+
+Code generation
+---------------
+
+The ``Code`` class accumulates arrays and functions as they are
+generated.  ``genCode()`` on a solution recursively generates code
+for all levels, registering arrays and helper functions in the Code
+object.  Finally, ``Code.print_code()`` emits the accumulated
+declarations in the target language (C or Rust).
+
+The ``Language`` class hierarchy abstracts syntax differences between
+C and Rust: type names, array declarations, function signatures,
+linkage keywords, index expressions, and so on.
 """
 
 from __future__ import print_function, division, absolute_import
@@ -45,6 +114,15 @@ __version__ = "0.3.0"
 
 
 class AutoMapping(collections.defaultdict):
+    """Bidirectional mapping that auto-assigns integer IDs to new keys.
+
+    Used during InnerLayer splitting: pairs of values like (3, 7) are
+    mapped to compact integer IDs (0, 1, 2, ...) for the next level.
+    The mapping is bidirectional — ``m[(3,7)]`` returns the ID, and
+    ``m[id]`` returns ``(3, 7)`` — so that code generation can
+    reconstruct the expansion tables.
+    """
+
     _next = 0
 
     def __missing__(self, key):
@@ -57,8 +135,14 @@ class AutoMapping(collections.defaultdict):
 
 
 def binaryBitsFor(minV, maxV):
-    """Returns smallest power-of-two number of bits needed to represent n
-    different values.
+    """Returns the smallest power-of-two bit width that can store values
+    in [minV, maxV].
+
+    The returned widths — 0, 1, 2, 4, 8, 16, 32, 64 — correspond to
+    sub-byte packing granularities (0/1/2/4 bits per item packed into
+    bytes) and standard C/Rust integer types (u8, u16, u32, u64).
+    Only power-of-two widths are used because they allow bit-shift
+    indexing without division.
 
     >>> binaryBitsFor(0, 0)
     0
@@ -114,6 +198,16 @@ def binaryBitsFor(minV, maxV):
 
 
 class Language:
+    """Base class for target-language code generation backends.
+
+    Subclasses (LanguageC, LanguageRust) override syntax-specific methods:
+    type names, declarations, index expressions, linkage keywords, etc.
+
+    Instances may be configured (e.g. ``unsafe_array_access=True`` for
+    Rust's ``get_unchecked``).  Default instances live in the ``languages``
+    dict; ``languageClasses`` holds the classes for custom instantiation.
+    """
+
     def __init__(self, *, unsafe_array_access=False):
         self.unsafe_array_access = unsafe_array_access
 
@@ -353,6 +447,8 @@ languages = {k: v() for k, v in languageClasses.items()}
 
 
 class Array:
+    """A named typed array accumulating values for code generation."""
+
     def __init__(self, typ):
         self.typ = typ
         self.values = []
@@ -364,6 +460,8 @@ class Array:
 
 
 class Function:
+    """A generated inline function with a single-expression body."""
+
     def __init__(self, retType, args, body, *, private=True):
         self.retType = retType
         self.args = args
@@ -372,6 +470,20 @@ class Function:
 
 
 class Code:
+    """Accumulator for generated arrays and functions.
+
+    During ``genCode()``, each solution level registers its data array
+    (via ``addArray``) and helper functions (via ``addFunction``) here.
+    Multiple solutions sharing the same sub-byte accessor or the same
+    array name will deduplicate automatically.
+
+    Arrays with the same name accumulate values contiguously; the
+    returned ``start`` offset lets each level index into its portion.
+
+    Call ``print_code()`` to emit all accumulated declarations in the
+    target language.
+    """
+
     def __init__(self, namespace=""):
         self.namespace = namespace
         self.functions = collections.OrderedDict()
@@ -436,12 +548,36 @@ class Code:
             println("%s%s %s (%s);" % (linkage, function.retType, name, args))
 
 
+# Cost model constants.  These tune the tradeoff between table size
+# (bytes of storage) and lookup speed (number of operations).
+#
+# bytesPerOp:        how many bytes of storage one extra op is "worth".
+#                    Higher values bias toward fewer ops (faster lookup).
+# lookupOps:         estimated ops per table indirection (array index,
+#                    bounds-check overhead, cache miss potential).
+# subByteAccessOps:  extra ops for sub-byte extraction (shift + mask
+#                    to unpack 1/2/4-bit values from a byte).
+
 bytesPerOp = 4
 lookupOps = 4
 subByteAccessOps = 4
 
 
 class Solution:
+    """A single point on the Pareto frontier of size vs. speed.
+
+    Each solution records:
+      - ``layer``:     the Layer that produced this solution.
+      - ``next``:      the child solution for the next level (or None).
+      - ``nLookups``:  total table indirections (determines speed).
+      - ``nExtraOps``: additional operations (bias add, mult, sub-byte).
+      - ``cost``:      total bytes of array storage.
+
+    ``fullCost`` combines storage bytes with an operation penalty,
+    giving a single comparable metric.  During pruning, a solution
+    that is worse on *both* nLookups and fullCost is discarded.
+    """
+
     def __init__(self, layer, next, nLookups, nExtraOps, cost):
         self.layer = layer
         self.next = next
@@ -500,11 +636,36 @@ def fastType(typ):
 
 
 class InnerSolution(Solution):
+    """Solution produced by InnerLayer — one specific split depth.
+
+    ``bits`` is the number of index bits consumed at *this* level.
+    If bits == 0, this is a leaf (single flat array).  If bits == K,
+    the index is split: low K bits select within a group, high bits
+    are delegated to ``self.next``.
+    """
+
     def __init__(self, layer, next, nLookups, nExtraOps, cost, bits=0):
         Solution.__init__(self, layer, next, nLookups, nExtraOps, cost)
         self.bits = bits
 
     def genCode(self, code, name=None, var="u", language="c"):
+        """Generate lookup code for this solution level.
+
+        Recursively generates code for child levels (``self.next``),
+        then emits the data array and index expression for this level.
+
+        The generated expression composes as:
+
+            outer_level(  inner_level(  leaf_array[index]  )  )
+
+        Each level either:
+          - Inlines the data as an integer constant (if <= 64 bits),
+          - Emits a direct array index (if unitBits >= 8), or
+          - Emits a sub-byte accessor function call (if unitBits < 8).
+
+        Returns ``(retType, expr)`` where ``expr`` is the C/Rust
+        expression that computes the lookup for this level.
+        """
         inputVar = var
         if name:
             var = "u"
@@ -517,18 +678,26 @@ class InnerSolution(Solution):
         retType = fastType(typ)
         unitBits = self.layer.unitBits
         if not unitBits:
+            # All values are identical (maxV == 0); return the constant.
             expr = self.layer.data[0]
             return (retType, expr)
 
         shift = self.bits
         mask = (1 << shift) - 1
 
+        # Recurse into the child level (higher bits of the index).
         if self.next:
             (_, expr) = self.next.genCode(
                 code, None, "((%s)>>%d)" % (var, shift), language=language
             )
 
-        # Generate data.
+        # Reconstruct the flat data for this level by expanding the
+        # chain of split mappings back into a single array.
+        #
+        # If bits == 0 (leaf), the data is just the layer's own data.
+        # If bits > 0, we walk the split chain and expand each mapping
+        # entry back into its constituent pair, recursively, producing
+        # the full 2^bits-wide expansion table.
 
         layers = []
         layer = self.layer
@@ -541,7 +710,6 @@ class InnerSolution(Solution):
         data = []
         if not layers:
             mapping = layer.mapping
-            # TODO Following is always true.
             if isinstance(layer.data[0], int):
                 data.extend(layer.data)
             else:
@@ -551,15 +719,19 @@ class InnerSolution(Solution):
             for d in range(layer.maxV + 1):
                 _expand(d, layers, len(layers) - 1, data)
 
+        # Pack sub-byte values: multiple 1/2/4-bit items per byte.
         data = _combine(data, self.layer.unitBits)
 
-        # Check if data can be inlined as a single integer constant.
+        # If the packed data fits in a single integer (<= 64 bits),
+        # inline it as a constant instead of emitting an array.
         can_inline = len(data) * 8 <= 64
 
         if not can_inline:
             arrName, start = code.addArray(typ, typeAbbr(typ), data)
 
-        # Generate expression.
+        # Build the index expression.  For a multi-level solution:
+        #   index = (child_expr << shift) | (var & mask)
+        # For a single-level solution (shift == 0): index = var.
 
         if expr == "0":
             index0 = ""
@@ -570,7 +742,11 @@ class InnerSolution(Solution):
         index1 = "((%s)&%s)" % (var, mask) if mask else ""
         index = language.as_usize(index0) + ("+" if index0 and index1 else "") + language.as_usize(index1)
 
+        # Emit the lookup expression, choosing between three strategies:
         if can_inline:
+            # Strategy 1: inline constant with bit extraction.
+            # Pack all bytes into one integer and extract with shift+mask.
+            #   (CONSTANT >> (index << log2(unitBits))) & ((1 << unitBits) - 1)
             packed = 0
             for i, b in enumerate(data):
                 packed |= b << (i * 8)
@@ -584,11 +760,16 @@ class InnerSolution(Solution):
             else:
                 expr = "((%s>>(%s))&%d)" % (lit, idx, elementMask)
         elif unitBits >= 8:
+            # Strategy 2: direct array indexing (one value per element).
             start = language.usize_literal(start) if start else None
             if start:
                 index = "%s+%s" % (start, language.as_usize(index))
             expr = language.array_index(arrName, index)
         else:
+            # Strategy 3: sub-byte accessor function.
+            # Values are packed N-per-byte; a helper function extracts
+            # element i from byte array a:
+            #   (a[i >> log2(8/unitBits)] >> ((i & mask) << log2(unitBits))) & valueMask
             start = language.usize_literal(start) if start else None
             shift1 = int(round(log2(8 // unitBits)))
             mask1 = (8 // unitBits) - 1
@@ -607,8 +788,7 @@ class InnerSolution(Solution):
                 sliced_array = language.borrow(arrName)
             expr = "%s(%s,%s)" % (funcName, sliced_array, index)
 
-        # Wrap up.
-
+        # If this is the top-level named function, wrap the expression.
         if name:
             funcName = code.addFunction(retType, name, ((language.u32, "u"),), expr)
             expr = "%s(%s)" % (funcName, inputVar)
@@ -617,6 +797,13 @@ class InnerSolution(Solution):
 
 
 def _expand(v, stack, i, out):
+    """Recursively expand a mapping index back into flat data values.
+
+    During splitting, pairs of values are mapped to single indices via
+    AutoMapping.  This function reverses that: given an index ``v`` at
+    level ``i`` of the ``stack``, it looks up the pair, and recursively
+    expands each half, appending leaf values to ``out``.
+    """
     if i < 0:
         out.append(v)
         return
@@ -627,6 +814,15 @@ def _expand(v, stack, i, out):
 
 
 def _combine(data, bits):
+    """Pack sub-byte values into bytes.
+
+    If ``bits`` (the per-element width) is 1, 2, or 4, multiple values
+    are combined into each byte.  For example, with 2-bit values,
+    four values [a, b, c, d] become one byte: d<<6 | c<<4 | b<<2 | a.
+
+    The cascading ``if`` statements handle each packing stage:
+    1-bit → 2-bit → 4-bit → 8-bit (byte).
+    """
     if bits <= 1:
         data = _combine2(data, lambda a, b: (b << 1) | a)
     if bits <= 2:
@@ -637,6 +833,7 @@ def _combine(data, bits):
 
 
 def _combine2(data, f):
+    """Pairwise reduce: combine adjacent elements using function ``f``."""
     data2 = []
     it = iter(data)
     for first in it:
@@ -645,6 +842,8 @@ def _combine2(data, f):
 
 
 class Layer:
+    """Base for InnerLayer and OuterLayer."""
+
     def __init__(self, data):
         self.data = data
         self.next = None
@@ -652,10 +851,20 @@ class Layer:
 
 
 class InnerLayer(Layer):
-    """
-    A layer that can reproduce @data passed to its constructor, by
-    using multiple lookup tables that split the domain by powers
-    of two.
+    """Recursive binary-split engine producing multi-level lookup solutions.
+
+    Given a data array, InnerLayer considers:
+      1. A flat solution (one lookup, cost = data size in bytes).
+      2. Splitting: pair adjacent elements, map each unique pair to
+         an integer ID (via AutoMapping), and recurse on the half-sized
+         array of IDs.  Each split adds one level of indirection.
+
+    The recursion builds a chain of InnerLayers linked by ``.next``.
+    At each depth, solutions from the child are combined with the
+    expansion cost at this level to form new candidate solutions.
+
+    All non-dominated solutions are kept (Pareto frontier on nLookups
+    vs. fullCost), so the caller can choose the desired tradeoff.
     """
 
     def __init__(self, data):
@@ -698,6 +907,12 @@ class InnerLayer(Layer):
         self.prune_solutions()
 
     def split(self):
+        """Split data by pairing adjacent elements.
+
+        Pad to even length, then map each pair (a, b) to a unique
+        integer ID.  The resulting half-length array of IDs becomes
+        the data for the next (child) InnerLayer.
+        """
         if len(self.data) & 1:
             self.data.append(0)
 
@@ -707,7 +922,10 @@ class InnerLayer(Layer):
         self.next = InnerLayer(data2)
 
     def prune_solutions(self):
-        """Remove dominated solutions."""
+        """Remove dominated solutions (Pareto pruning).
+
+        A solution B is dominated by A if A has <= lookups AND
+        <= fullCost.  Only non-dominated solutions survive."""
 
         # Doing it the slowest, O(N^2), way for now.
         sols = self.solutions
@@ -730,6 +948,8 @@ class InnerLayer(Layer):
 
 
 class OuterSolution(Solution):
+    """Solution wrapping an InnerSolution with OuterLayer's arithmetic."""
+
     def __init__(self, layer, next, nLookups, nExtraOps, cost):
         Solution.__init__(self, layer, next, nLookups, nExtraOps, cost)
 
@@ -795,13 +1015,39 @@ def gcd(lst):
 
 
 class OuterLayer(Layer):
-    """
-    A layer that can reproduce @data passed to its constructor, by
-    simple arithmetic tricks to reduce its size.
+    """Arithmetic preprocessing layer that wraps InnerLayer.
+
+    Before handing data to InnerLayer for binary splitting, OuterLayer
+    tries to shrink the value range using arithmetic reductions:
+
+    1. **Bias only**: subtract min value.  E.g. [100..115] → [0..15]
+       reduces from 8-bit to 4-bit.  Generated code: ``bias + inner(u)``.
+
+    2. **GCD only**: divide all values by their GCD.  E.g. [0,6,12,18]
+       → [0,1,2,3] (GCD=6).  Generated code: ``mult * inner(u)``.
+
+    3. **Bias + GCD**: subtract bias, then divide by GCD of remainders.
+       Generated code: ``bias + mult * inner(u)``.
+
+    The best reduction (fewest bits) wins.
+
+    **Mult bake-in**: after choosing a GCD factor, if multiplying the
+    stored values back up doesn't change the C integer type (e.g. both
+    fit in uint8_t), store the un-divided values and skip the runtime
+    multiplication.  This trades slightly larger sub-byte storage for
+    one fewer runtime operation.
+
+    After reduction, trailing default values are stripped from the data
+    (since they can be handled by the bounds check in the generated
+    ternary/if expression).  The reduced data is then passed to
+    InnerLayer, and each InnerLayer solution is wrapped in an
+    OuterSolution that accounts for the extra bias/mult ops.
     """
 
     def __init__(self, data, default):
         data = list(data)
+        # Strip trailing default values — the generated bounds check
+        # (``u < len``) handles out-of-range indices.
         while len(data) > 1 and data[-1] == default:
             data.pop()
         Layer.__init__(self, data)
@@ -813,12 +1059,14 @@ class OuterLayer(Layer):
         mult = 1
         unitBits = binaryBitsFor(self.minV, self.maxV)
         if type(self.minV) == int and type(self.maxV) == int:
+            # Try bias-only reduction.
             b = self.minV
             candidateBits = binaryBitsFor(0, self.maxV - b)
             if unitBits > candidateBits:
                 unitBits = candidateBits
                 bias = b
 
+            # Try GCD-only reduction.
             m = gcd(data)
             candidateBits = binaryBitsFor(self.minV // m, self.maxV // m)
             if unitBits > candidateBits:
@@ -826,6 +1074,7 @@ class OuterLayer(Layer):
                 bias = 0
                 mult = m
 
+            # Try combined bias + GCD reduction.
             if b:
                 m = gcd(d - b for d in data)
                 if m == 0:
@@ -838,7 +1087,8 @@ class OuterLayer(Layer):
             data = [(d - bias) // mult for d in self.data]
             default = (self.default - bias) // mult
 
-            # Bake in width multiplier if doing so doesn't enlarge data type.
+            # Bake in width multiplier if doing so doesn't enlarge the
+            # C integer type of the stored values.
             if mult > 1:
                 undivided = [(d - bias) for d in self.data]
                 divided_type_width = max(8, binaryBitsFor(min(data), max(data)))
@@ -862,6 +1112,7 @@ class OuterLayer(Layer):
 
         extraCost = 0
 
+        # Wrap each InnerLayer solution with our arithmetic overhead.
         layer = self.next
         for s in layer.solutions:
             nLookups = s.nLookups
@@ -935,6 +1186,15 @@ def pack_table(data, default=0, compression=1, mapping=None):
 
 
 def pick_solution(solutions, compression=1):
+    """Select the best solution from the Pareto frontier.
+
+    The ``compression`` parameter controls the tradeoff:
+      - Higher values prefer smaller tables (more compression).
+      - Lower values prefer fewer lookups (faster access).
+
+    The scoring function ``nLookups + compression * log2(fullCost)``
+    balances lookup count against log-scaled storage cost.
+    """
     return min(solutions, key=lambda s: s.nLookups + compression * log2(s.fullCost))
 
 
