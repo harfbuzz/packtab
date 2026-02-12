@@ -57,11 +57,60 @@ def main(args=None):
         default="data",
         help="namespace prefix for generated symbols (default: data)",
     )
+    parser.add_argument(
+        "--analyze",
+        action="store_true",
+        help="show compression statistics instead of generating code",
+    )
 
     parsed = parser.parse_args(args)
 
     language = "rust" if parsed.rust else parsed.language
 
+    if parsed.analyze:
+        # Get all Pareto-optimal solutions for analysis
+        solutions = pack_table(
+            parsed.data, parsed.default, compression=None
+        )
+
+        original_size = len(parsed.data)
+        # Calculate bits needed for the data range
+        minV = min(parsed.data)
+        maxV = max(parsed.data)
+        bits_needed = binaryBitsFor(minV, maxV)
+        # Round up to next byte boundary for original storage
+        original_bytes = original_size * max(1, (bits_needed + 7) // 8)
+
+        print("Compression Analysis")
+        print("=" * 70)
+        print(f"Original data: {original_size} values, range [{minV}..{maxV}]")
+        print(f"Original storage: {bits_needed} bits/value, {original_bytes} bytes total")
+        print(f"Default value: {parsed.default}")
+        print()
+        print(f"Found {len(solutions)} Pareto-optimal solutions:")
+        print()
+        print(f"{'#':<3} {'Lookups':<8} {'ExtraOps':<9} {'Bytes':<6} {'FullCost':<8} {'Ratio':<7} {'Score':<8}")
+        print("-" * 70)
+
+        for i, sol in enumerate(solutions):
+            ratio = original_bytes / sol.cost if sol.cost > 0 else float('inf')
+            score = sol.nLookups + parsed.compression * (sol.fullCost.bit_length() - 1)
+            print(f"{i+1:<3} {sol.nLookups:<8} {sol.nExtraOps:<9} {sol.cost:<6} {sol.fullCost:<8} {ratio:>6.2f}x {score:>7.1f}")
+
+        print()
+        # Highlight the chosen solution for the current compression parameter
+        chosen = pick_solution(solutions, parsed.compression)
+        chosen_idx = solutions.index(chosen)
+        print(f"Best solution for compression={parsed.compression}: #{chosen_idx+1}")
+        print(f"  {chosen.nLookups} lookups, {chosen.nExtraOps} extra ops, {chosen.cost} bytes")
+        if chosen.cost > 0:
+            print(f"  Compression ratio: {original_bytes/chosen.cost:.2f}x")
+        else:
+            print(f"  Compression ratio: ∞ (computed inline, no storage)")
+
+        return 0
+
+    # Normal code generation path
     solution = pack_table(
         parsed.data, parsed.default, compression=parsed.compression
     )

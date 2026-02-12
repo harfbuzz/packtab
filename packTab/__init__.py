@@ -92,7 +92,7 @@ from functools import partial
 from typing import Union, List, Dict, Optional, Any, Iterable, Tuple, TextIO
 
 
-__all__ = ["Code", "pack_table", "pick_solution", "languages", "languageClasses"]
+__all__ = ["Code", "pack_table", "pick_solution", "languages", "languageClasses", "binaryBitsFor"]
 
 __version__ = "0.4.0"
 
