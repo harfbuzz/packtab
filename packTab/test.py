@@ -488,8 +488,13 @@ class TestOuterLayer:
         assert layer.data == [1, 2, 3]
 
     def test_bias_optimization(self):
+        # bias gets baked in when original data fits in same type
         layer = OuterLayer([100, 101, 102, 103], 0)
-        assert layer.bias == 100 or layer.mult > 1
+        assert layer.bias == 0  # baked in: [100..103] fits in uint8_t
+
+        # bias kept when baking in would enlarge the type
+        layer = OuterLayer([1000, 1001, 1002, 1003], 0)
+        assert layer.bias == 1000
 
     def test_gcd_optimization(self):
         # mult gets baked in when undivided data fits in same type
@@ -717,11 +722,12 @@ class TestInlining:
 
     def test_inline_uses_literal(self):
         code = _generate([1, 2, 3, 4], language="c")
-        assert "228u" in code  # inlined constant
+        # Bias baked in: stores [1,2,3,4] directly (4-bit packed = 17185)
+        assert "17185u" in code
 
     def test_inline_rust_uses_typed_literal(self):
         code = _generate([1, 2, 3, 4], language="rust")
-        assert "228u8" in code
+        assert "17185u16" in code
 
 
 class TestMultBakeIn:
@@ -763,6 +769,38 @@ class TestMultBakeIn:
     def test_bake_in_with_bias_e2e_c(self):
         """End-to-end: bias + GCD where multiplier is baked in."""
         data = [100, 106, 112, 118]
+        code = _generate(data, language="c")
+        TestEndToEndC._compile_and_run(code, data, 0)
+
+
+class TestBiasBakeIn:
+    """Verify that bias is baked in when type doesn't change."""
+
+    def test_bake_in_small_bias(self):
+        """Bias data where original values still fit in same C type."""
+        layer = OuterLayer([100, 101, 102, 103], 0)
+        assert layer.bias == 0  # baked in
+
+    def test_no_bake_in_type_change(self):
+        """Bias data where original values need a larger type."""
+        layer = OuterLayer([1000, 1001, 1002, 1003], 0)
+        assert layer.bias == 1000
+
+    def test_bake_in_no_bias_in_code(self):
+        code = _generate([200, 201, 202, 203], language="c")
+        assert "200+" not in code
+
+    def test_no_bake_in_has_bias_in_code(self):
+        code = _generate([1000, 1001, 1002, 1003], language="c")
+        assert "1000+" in code
+
+    def test_bake_in_e2e_c(self):
+        data = [100, 101, 102, 103, 104, 105]
+        code = _generate(data, language="c")
+        TestEndToEndC._compile_and_run(code, data, 0)
+
+    def test_no_bake_in_e2e_c(self):
+        data = [1000, 1001, 1002, 1003]
         code = _generate(data, language="c")
         TestEndToEndC._compile_and_run(code, data, 0)
 

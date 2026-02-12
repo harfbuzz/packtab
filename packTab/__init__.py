@@ -1098,6 +1098,18 @@ class OuterLayer(Layer):
                     unitBits = binaryBitsFor(min(undivided), max(undivided))
                     mult = 1
 
+            # Bake in bias if doing so doesn't enlarge the C integer type.
+            # E.g. [100..115] with bias=100 stores [0..15]; if [100..115]
+            # still fits in the same type (uint8_t), store them directly.
+            if bias != 0 and mult == 1:
+                original = list(self.data)
+                current_type_width = max(8, binaryBitsFor(min(data), max(data)))
+                original_type_width = max(8, binaryBitsFor(min(original), max(original)))
+                if original_type_width <= current_type_width:
+                    data = original
+                    unitBits = binaryBitsFor(min(original), max(original))
+                    bias = 0
+
         self.unitBits = unitBits
         self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
         self.bias = bias
