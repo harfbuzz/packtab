@@ -204,14 +204,14 @@ def main(args=None):
 
         for i, sol in enumerate(solutions):
             ratio = original_bytes / sol.cost if sol.cost > 0 else float("inf")
-            score = sol.nLookups + parsed.compression * (sol.fullCost.bit_length() - 1)
+            score = sol.nLookups + compression_values[0] * (sol.fullCost.bit_length() - 1)
             print(
                 f"{i+1:<3} {sol.nLookups:<8} {sol.nExtraOps:<9} {sol.cost:<6} {sol.fullCost:<8} {ratio:>6.2f}x {score:>7.1f}"
             )
 
         print()
         # Highlight the chosen solution for the current compression parameter
-        chosen = pick_solution(solutions, parsed.compression)
+        chosen = pick_solution(solutions, compression_values[0])
         chosen_idx = solutions.index(chosen)
         print(f"Best solution for compression={parsed.compression}: #{chosen_idx+1}")
         print(

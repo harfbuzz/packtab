@@ -1220,7 +1220,9 @@ class OuterLayer(Layer):
             # Bake in bias if doing so doesn't enlarge the C integer type
             # and doesn't introduce negative values (which would change
             # signedness and break sub-byte packing / inlining).
-            if bias != 0 and mult == 1 and min(base) >= 0:
+            # Don't bake if data is all zeros (constant), as InnerLayer
+            # optimizes that case to cost=0.
+            if bias != 0 and mult == 1 and min(base) >= 0 and max(data) != 0:
                 current_type_width = max(8, binaryBitsFor(min(data), max(data)))
                 base_type_width = max(8, binaryBitsFor(min(base), max(base)))
                 if base_type_width <= current_type_width:
