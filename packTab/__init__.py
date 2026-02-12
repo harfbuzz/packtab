@@ -101,7 +101,7 @@ __all__ = [
     "binaryBitsFor",
 ]
 
-__version__ = "0.4.0"
+__version__ = "1.0.0"
 
 
 class AutoMapping(collections.defaultdict):
@@ -1317,16 +1317,41 @@ def pack_table(
 
     # Set up mapping.  See docstring.
     if mapping is not None:
-        # Validate mapping is consistently int→str or str→int
+        # Validate and normalize mapping to be bidirectional.
+        # Accept either unidirectional (all int→str or all str→int) or
+        # already-bidirectional mappings.
         if not mapping:
             raise ValueError("mapping must not be empty")
+
+        # Check if it's a valid unidirectional mapping
         int_to_nonint = all(isinstance(k, int) and not isinstance(v, int) for k, v in mapping.items())
         nonint_to_int = all(not isinstance(k, int) and isinstance(v, int) for k, v in mapping.items())
+
+        # Check if it's already bidirectional: every int key has a corresponding
+        # non-int value that maps back, and vice versa
         if not (int_to_nonint or nonint_to_int):
-            raise TypeError("mapping must be consistently int→str or str→int, not mixed")
+            # Not unidirectional, check if it's a valid bidirectional mapping
+            int_keys = {k for k in mapping.keys() if isinstance(k, int)}
+            nonint_keys = {k for k in mapping.keys() if not isinstance(k, int)}
+
+            # Verify bidirectional consistency: for all int→nonint pairs,
+            # nonint→int must exist and match
+            is_bidirectional = (
+                int_keys and nonint_keys and
+                all(isinstance(mapping.get(k), int) for k in nonint_keys) and
+                all(not isinstance(mapping.get(k), int) for k in int_keys) and
+                all(mapping.get(mapping.get(k)) == k for k in int_keys) and
+                all(mapping.get(mapping.get(k)) == k for k in nonint_keys)
+            )
+
+            if not is_bidirectional:
+                raise TypeError("mapping must be consistently int→str or str→int, or a valid bidirectional mapping")
+
+        # Make bidirectional if not already
         mapping2 = mapping.copy()
         for k, v in mapping.items():
-            mapping2[v] = k
+            if v not in mapping2:
+                mapping2[v] = k
         mapping = mapping2
         del mapping2
 
