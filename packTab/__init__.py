@@ -88,24 +88,10 @@ C and Rust: type names, array declarations, function signatures,
 linkage keywords, index expressions, and so on.
 """
 
-from __future__ import print_function, division, absolute_import
 import sys
 import collections
-from math import ceil
-from itertools import count
+from math import ceil, log2
 from functools import partial
-
-try:
-    from math import log2
-except ImportError:
-    from math import log
-    from functools import partial
-
-    log2 = lambda x: log(x, 2)
-
-if sys.version_info[0] < 3:
-    _float_ceil = ceil
-    ceil = lambda x: int(_float_ceil(x))
 
 
 __all__ = ["Code", "pack_table", "pick_solution", "languages", "languageClasses"]
