@@ -1224,6 +1224,9 @@ def pack_table(data, default=0, compression=1, mapping=None):
     to zero.
     """
 
+    if not data:
+        raise ValueError("data must not be empty")
+
     # Set up mapping.  See docstring.
     if mapping is not None:
         # assert (all(isinstance(k, int) and not isinstance(v, int) for k,v in mapping.items()) or

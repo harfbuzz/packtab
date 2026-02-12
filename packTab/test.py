@@ -548,6 +548,14 @@ class TestPackTable:
         solution = pack_table([0, 1000, 2000, 3000], default=0)
         assert isinstance(solution, (InnerSolution, OuterSolution))
 
+    def test_empty_list_raises(self):
+        with pytest.raises(ValueError):
+            pack_table([], default=0)
+
+    def test_empty_dict_raises(self):
+        with pytest.raises(ValueError):
+            pack_table({}, default=0)
+
 
 class TestPickSolution:
     def test_returns_single_solution(self):
