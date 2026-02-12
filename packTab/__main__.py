@@ -59,7 +59,7 @@ def main(args=sys.argv):
 
     solution = pack_table(data, default, compression=compression)
 
-    lang = languages[language](unsafe_array_access=unsafe)
+    lang = languageClasses[language](unsafe_array_access=unsafe)
 
     code = Code("data")
     expr = solution.genCode(code, "get", language=lang, private=False)

@@ -46,12 +46,12 @@ The `pack_table` function accepts:
 ### Rust with unsafe access
 
 ```python
-from packTab import pack_table, Code, languages
+from packTab import pack_table, Code, languageClasses
 
 data = list(range(256)) * 4
 solution = pack_table(data, default=0)
 
-lang = languages["rust"](unsafe_array_access=True)
+lang = languageClasses["rust"](unsafe_array_access=True)
 code = Code("mytable")
 solution.genCode(code, "lookup", language=lang, private=False)
 code.print_code(language=lang)

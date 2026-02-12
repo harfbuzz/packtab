@@ -39,7 +39,7 @@ if sys.version_info[0] < 3:
     ceil = lambda x: int(_float_ceil(x))
 
 
-__all__ = ["Code", "pack_table", "pick_solution", "languages"]
+__all__ = ["Code", "pack_table", "pick_solution", "languages", "languageClasses"]
 
 __version__ = "0.3.0"
 
@@ -350,10 +350,12 @@ class LanguageRust(Language):
     def return_stmt(self, expr):
         return expr
 
-languages = {
+languageClasses = {
     "c": LanguageC,
     "rust": LanguageRust,
 }
+
+languages = {k: v() for k, v in languageClasses.items()}
 
 
 class Array:
@@ -410,7 +412,7 @@ class Code:
         println = partial(printn, indent)
 
         if isinstance(language, str):
-            language = languages[language]()
+            language = languages[language]
 
         language.print_preamble(print=println)
 
@@ -515,7 +517,7 @@ class InnerSolution(Solution):
         expr = var
 
         if isinstance(language, str):
-            language = languages[language]()
+            language = languages[language]
 
         typ = language.type_for(self.layer.minV, self.layer.maxV)
         retType = fastType(typ)
@@ -743,7 +745,7 @@ class OuterSolution(Solution):
             var = "u"
 
         if isinstance(language, str):
-            language = languages[language]()
+            language = languages[language]
 
         if self.layer.shift:
             var = language.wrapping_sub(var, language.usize_literal(self.layer.shift))

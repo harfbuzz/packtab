@@ -14,6 +14,7 @@ from packTab import (
     binaryBitsFor,
     gcd,
     languages,
+    languageClasses,
     pack_table,
     pick_solution,
     typeWidth,
@@ -365,14 +366,18 @@ class TestLanguagesDict:
         assert "c" in languages
         assert "rust" in languages
 
-    def test_values_are_classes(self):
-        assert languages["c"] is LanguageC
-        assert languages["rust"] is LanguageRust
+    def test_values_are_instances(self):
+        assert isinstance(languages["c"], LanguageC)
+        assert isinstance(languages["rust"], LanguageRust)
+
+    def test_classes_dict(self):
+        assert languageClasses["c"] is LanguageC
+        assert languageClasses["rust"] is LanguageRust
 
     def test_instantiation(self):
-        c = languages["c"]()
+        c = languageClasses["c"]()
         assert isinstance(c, LanguageC)
-        rs = languages["rust"](unsafe_array_access=True)
+        rs = languageClasses["rust"](unsafe_array_access=True)
         assert rs.unsafe_array_access is True
 
 
@@ -585,7 +590,7 @@ class TestPickSolution:
 def _generate(data, default=0, language="c", **lang_kwargs):
     """Helper: pack data and generate code as a string."""
     solution = pack_table(data, default=default)
-    lang_cls = languages[language]
+    lang_cls = languageClasses[language]
     lang = lang_cls(**lang_kwargs)
     code = Code("data")
     solution.genCode(code, "get", language=lang, private=False)
