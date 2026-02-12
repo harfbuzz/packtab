@@ -12,9 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO:
-# - Byte reuse!  Much bigger work item.
-
 """
 Pack a static table of integers into compact lookup tables to save space.
 
