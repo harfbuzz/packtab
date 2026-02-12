@@ -1016,6 +1016,45 @@ def gcd(lst):
     return x
 
 
+def _best_reduction(values, minV, maxV):
+    """Find the (unitBits, bias, mult) triple that minimizes unitBits.
+
+    Tries three strategies on the values:
+      1. Bias only: subtract minV.
+      2. GCD only: divide by the common factor.
+      3. Bias + GCD: subtract minV, then divide by GCD of remainders.
+    """
+    bias = 0
+    mult = 1
+    unitBits = binaryBitsFor(minV, maxV)
+
+    b = minV
+    candidateBits = binaryBitsFor(0, maxV - b)
+    if unitBits > candidateBits:
+        unitBits = candidateBits
+        bias = b
+
+    m = gcd(values)
+    if m > 1:
+        candidateBits = binaryBitsFor(minV // m, maxV // m)
+        if unitBits > candidateBits:
+            unitBits = candidateBits
+            bias = 0
+            mult = m
+
+    if b:
+        m = gcd(d - b for d in values)
+        if m == 0:
+            m = 1
+        candidateBits = binaryBitsFor(0, (maxV - b) // m)
+        if unitBits > candidateBits:
+            unitBits = candidateBits
+            bias = b
+            mult = m
+
+    return unitBits, bias, mult
+
+
 class OuterLayer(Layer):
     """Arithmetic preprocessing layer that wraps InnerLayer.
 
@@ -1064,70 +1103,19 @@ class OuterLayer(Layer):
 
         self.minV, self.maxV = min(data), max(data)
 
+        identity = False
         bias = 0
         mult = 1
         unitBits = binaryBitsFor(self.minV, self.maxV)
         if type(self.minV) == int and type(self.maxV) == int:
-            # Try bias-only reduction.
-            b = self.minV
-            candidateBits = binaryBitsFor(0, self.maxV - b)
-            if unitBits > candidateBits:
-                unitBits = candidateBits
-                bias = b
-
-            # Try GCD-only reduction.
-            m = gcd(data)
-            candidateBits = binaryBitsFor(self.minV // m, self.maxV // m)
-            if unitBits > candidateBits:
-                unitBits = candidateBits
-                bias = 0
-                mult = m
-
-            # Try combined bias + GCD reduction.
-            if b:
-                m = gcd(d - b for d in data)
-                if m == 0:
-                    m = 1
-                candidateBits = binaryBitsFor(0, (self.maxV - b) // m)
-                if unitBits > candidateBits:
-                    unitBits = candidateBits
-                    bias = b
-                    mult = m
+            unitBits, bias, mult = _best_reduction(data, self.minV, self.maxV)
 
             # Try identity subtraction: store data[i] - i instead.
             # Useful when data is approximately linear (data[i] ≈ i),
             # e.g. Unicode mirroring tables where most chars map to themselves.
-            identity = False
             deltas = [d - i for i, d in enumerate(self.data)]
             dMin, dMax = min(deltas), max(deltas)
-
-            id_bias = 0
-            id_mult = 1
-            id_unitBits = binaryBitsFor(dMin, dMax)
-
-            db = dMin
-            candidateBits = binaryBitsFor(0, dMax - db)
-            if id_unitBits > candidateBits:
-                id_unitBits = candidateBits
-                id_bias = db
-
-            m = gcd(deltas)
-            if m > 1:
-                candidateBits = binaryBitsFor(dMin // m, dMax // m)
-                if id_unitBits > candidateBits:
-                    id_unitBits = candidateBits
-                    id_bias = 0
-                    id_mult = m
-
-            if db:
-                m = gcd(d - db for d in deltas)
-                if m == 0:
-                    m = 1
-                candidateBits = binaryBitsFor(0, (dMax - db) // m)
-                if id_unitBits > candidateBits:
-                    id_unitBits = candidateBits
-                    id_bias = db
-                    id_mult = m
+            id_unitBits, id_bias, id_mult = _best_reduction(deltas, dMin, dMax)
 
             if id_unitBits < unitBits:
                 unitBits = id_unitBits
