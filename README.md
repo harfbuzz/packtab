@@ -74,16 +74,6 @@ on the `compression` parameter.
 pytest packTab/test.py
 ```
 
-## TODO
-
-- Bake in width multiplier into array data if doing so doesn't enlarge
-  data type.  Again, that would save ops.
-- If an array is not larger than 64 bits, inline it in code directly
-  as one integer.
-- Currently we only cull array of defaults at the end.  Do it at
-  beginning as well, and adjust split code to find optimum shift.
-- Byte reuse!  Much bigger work item.
-
 ## History
 
 I first wrote something like this back in 2001 when I needed it in FriBidi:
