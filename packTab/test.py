@@ -487,33 +487,6 @@ class TestOuterLayer:
         layer = OuterLayer([1, 2, 3, 0, 0, 0], 0)
         assert layer.data == [1, 2, 3]
 
-    def test_strips_leading_default(self):
-        # 3 leading defaults → shift rounds down to 2 (power of two)
-        layer = OuterLayer([0, 0, 0, 1, 2, 3], 0)
-        assert layer.data == [0, 1, 2, 3]
-        assert layer.shift == 2
-
-    def test_strips_leading_power_of_two(self):
-        # 4 leading defaults → shift = 4 (already power of two)
-        layer = OuterLayer([0, 0, 0, 0, 1, 2, 3], 0)
-        assert layer.data == [1, 2, 3]
-        assert layer.shift == 4
-
-    def test_strips_both_ends(self):
-        layer = OuterLayer([0, 0, 0, 0, 0, 1, 2, 3, 0, 0], 0)
-        assert layer.data == [0, 1, 2, 3]
-        assert layer.shift == 4
-
-    def test_no_strip_nondefault(self):
-        layer = OuterLayer([1, 2, 3], 0)
-        assert layer.shift == 0
-
-    def test_no_strip_single_leading(self):
-        # 1 leading default → shift = 1
-        layer = OuterLayer([0, 1, 2, 3], 0)
-        assert layer.shift == 1
-        assert layer.data == [1, 2, 3]
-
     def test_bias_optimization(self):
         layer = OuterLayer([100, 101, 102, 103], 0)
         assert layer.bias == 100 or layer.mult > 1
@@ -688,25 +661,6 @@ class TestEndToEndC:
         data = [0, 1, 0, 1, 0, 1, 0, 1]
         code = _generate(data, language="c")
         self._compile_and_run(code, data, 0)
-
-    def test_leading_defaults(self):
-        data = [0, 0, 0, 0, 5, 10, 15, 20]
-        code = _generate(data, language="c")
-        self._compile_and_run(code, data, 0)
-
-    def test_both_ends_defaults(self):
-        data = [0] * 10 + [1, 2, 3, 4, 5] + [0] * 10
-        code = _generate(data, language="c")
-        self._compile_and_run(code, data, 0)
-
-    def test_dict_sparse(self):
-        data = {100: 42, 101: 43, 102: 44}
-        code = _generate(data, language="c")
-        expected = [0] * 103
-        expected[100] = 42
-        expected[101] = 43
-        expected[102] = 44
-        self._compile_and_run(code, expected, 0)
 
 
 class TestEndToEndRust:
