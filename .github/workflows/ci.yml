@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  test:
+    name: Test Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        pip install pytest pytest-cov
+
+    - name: Run tests with coverage
+      run: |
+        pytest --cov=packTab --cov-report=xml --cov-report=term
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      if: matrix.python-version == '3.11'
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+
+  test-c-compilation:
+    name: Test C code generation and compilation
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install package
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+
+    - name: Generate and compile C code
+      run: |
+        # Test basic C generation
+        python -m packTab 1 2 3 4 > test_basic.c
+        echo "int main() { return 0; }" >> test_basic.c
+        gcc -Wall -Wextra -std=c99 -o test_basic test_basic.c
+
+        # Test larger dataset
+        seq 0 255 | python -m packTab > test_large.c
+        echo "int main() { return 0; }" >> test_large.c
+        gcc -Wall -Wextra -std=c99 -o test_large test_large.c
+
+  test-rust-compilation:
+    name: Test Rust code generation and compilation
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install package
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+
+    - name: Generate and compile Rust code
+      run: |
+        # Test basic Rust generation
+        python -m packTab --rust 1 2 3 4 > test_basic.rs
+        echo 'fn main() { println!("{}", data_get(0)); }' >> test_basic.rs
+        rustc test_basic.rs
+        ./test_basic
+
+        # Test larger dataset with unsafe
+        seq 0 255 | python -m packTab --rust --unsafe > test_large.rs
+        echo 'fn main() { println!("{}", data_get(128)); }' >> test_large.rs
+        rustc test_large.rs
+        ./test_large
+
+  lint:
+    name: Lint with Black and Flake8
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install linters
+      run: |
+        python -m pip install --upgrade pip
+        pip install black flake8
+
+    - name: Check code formatting with Black
+      run: |
+        black --check packTab
+
+    - name: Lint with Flake8
+      run: |
+        flake8 packTab --max-line-length=88 --extend-ignore=E203,W503
