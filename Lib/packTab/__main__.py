@@ -40,12 +40,17 @@ if sys.version_info[0] < 3:
 
 def main(args=sys.argv):
     if len(args) == 1:
-        print("usage: packTab [--rust] data...")
+        print("usage: packTab [--rust] [--unsafe] data...")
         return 1
 
     language = "c"
     if args[1] == "--rust":
         language = "rust"
+        args = args[1:]
+
+    unsafe = False
+    if args[1] == "--unsafe":
+        unsafe = True
         args = args[1:]
 
     data = [int(v) for v in args[1:]]
@@ -54,9 +59,12 @@ def main(args=sys.argv):
 
     solution = pack_table(data, default, compression=compression)
 
+    lang = languages[language]
+    lang.unsafe_array_access = unsafe
+
     code = Code("data")
-    expr = solution.genCode(code, "get", language=language, private=False)
-    code.print_code(language=language)
+    expr = solution.genCode(code, "get", language=lang, private=False)
+    code.print_code(language=lang)
 
     return 0
 

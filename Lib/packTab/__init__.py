@@ -173,6 +173,11 @@ class Language:
         print("  %s" % self.return_stmt(function.body))
         print(self.function_end)
 
+    unsafe_array_access = False
+
+    def array_index(self, name, index):
+        return "%s[%s]" % (name, index)
+
     def usize_literal(self, value):
         if value == '':
             return ''
@@ -351,6 +356,11 @@ class LanguageRust(Language):
                 return "%s as usize" % expr
             else:
                 return "(%s) as usize" % expr
+
+    def array_index(self, name, index):
+        if self.unsafe_array_access:
+            return "unsafe { *(%s.get_unchecked(%s)) }" % (name, index)
+        return "%s[%s]" % (name, index)
 
     def return_stmt(self, expr):
         return expr
@@ -578,13 +588,13 @@ class InnerSolution(Solution):
         if unitBits >= 8:
             if start:
                 index = "%s+%s" % (start, language.as_usize(index))
-            expr = "%s[%s]" % (arrName, index)
+            expr = language.array_index(arrName, index)
         else:
             shift1 = int(round(log2(8 // unitBits)))
             mask1 = (8 // unitBits) - 1
             shift2 = int(round(log2(unitBits)))
             mask2 = (1 << unitBits) - 1
-            funcBody = "(a[i>>%s]>>((i&%s)<<%d))&%s" % (shift1, mask1, shift2, mask2)
+            funcBody = "(%s>>((i&%s)<<%d))&%s" % (language.array_index("a", "i>>%s" % shift1), mask1, shift2, mask2)
             funcName = code.addFunction(
                 language.u8,
                 "b%s" % unitBits,
