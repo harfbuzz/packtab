@@ -966,6 +966,8 @@ class OuterSolution(Solution):
 
         if self.layer.mult != 1:
             expr = "%d*%s" % (self.layer.mult, expr)
+        if self.layer.identity:
+            expr = "%s+%s" % (var, expr)
         if self.layer.bias != 0:
             if self.layer.bias < 0:
                 expr = language.cast(retType, expr)
@@ -1025,7 +1027,14 @@ class OuterLayer(Layer):
     3. **Bias + GCD**: subtract bias, then divide by GCD of remainders.
        Generated code: ``bias + mult * inner(u)``.
 
-    The best reduction (fewest bits) wins.
+    4. **Identity subtraction**: subtract the index from each value.
+       Useful when data[i] ≈ i (e.g. Unicode mirroring tables where
+       most characters map to themselves).  Stores residuals
+       data[i] - i which are mostly zero.
+       Generated code: ``u + inner(u)`` (combinable with bias/GCD).
+
+    The best reduction (fewest bits) wins.  All four strategies (and
+    combinations of identity with bias/GCD) are tried.
 
     **Mult bake-in**: after choosing a GCD factor, if multiplying the
     stored values back up doesn't change the C integer type (e.g. both
@@ -1080,13 +1089,60 @@ class OuterLayer(Layer):
                     unitBits = candidateBits
                     bias = b
                     mult = m
-            data = [(d - bias) // mult for d in self.data]
-            default = (self.default - bias) // mult
+
+            # Try identity subtraction: store data[i] - i instead.
+            # Useful when data is approximately linear (data[i] ≈ i),
+            # e.g. Unicode mirroring tables where most chars map to themselves.
+            identity = False
+            deltas = [d - i for i, d in enumerate(self.data)]
+            dMin, dMax = min(deltas), max(deltas)
+
+            id_bias = 0
+            id_mult = 1
+            id_unitBits = binaryBitsFor(dMin, dMax)
+
+            db = dMin
+            candidateBits = binaryBitsFor(0, dMax - db)
+            if id_unitBits > candidateBits:
+                id_unitBits = candidateBits
+                id_bias = db
+
+            m = gcd(deltas)
+            if m > 1:
+                candidateBits = binaryBitsFor(dMin // m, dMax // m)
+                if id_unitBits > candidateBits:
+                    id_unitBits = candidateBits
+                    id_bias = 0
+                    id_mult = m
+
+            if db:
+                m = gcd(d - db for d in deltas)
+                if m == 0:
+                    m = 1
+                candidateBits = binaryBitsFor(0, (dMax - db) // m)
+                if id_unitBits > candidateBits:
+                    id_unitBits = candidateBits
+                    id_bias = db
+                    id_mult = m
+
+            if id_unitBits < unitBits:
+                unitBits = id_unitBits
+                bias = id_bias
+                mult = id_mult
+                identity = True
+
+            # Compute the stored values after all reductions.
+            # ``base`` is self.data with identity subtraction applied (if used).
+            if identity:
+                base = deltas
+            else:
+                base = list(self.data)
+            data = [(d - bias) // mult for d in base]
 
             # Bake in width multiplier if doing so doesn't enlarge the
             # C integer type of the stored values.
             if mult > 1:
-                undivided = [(d - bias) for d in self.data]
+                undivided = [(d - bias) for d in base]
                 divided_type_width = max(8, binaryBitsFor(min(data), max(data)))
                 undivided_type_width = max(8, binaryBitsFor(min(undivided), max(undivided)))
                 if undivided_type_width <= divided_type_width:
@@ -1095,19 +1151,19 @@ class OuterLayer(Layer):
                     mult = 1
 
             # Bake in bias if doing so doesn't enlarge the C integer type.
-            # E.g. [100..115] with bias=100 stores [0..15]; if [100..115]
-            # still fits in the same type (uint8_t), store them directly.
             if bias != 0 and mult == 1:
-                original = list(self.data)
                 current_type_width = max(8, binaryBitsFor(min(data), max(data)))
-                original_type_width = max(8, binaryBitsFor(min(original), max(original)))
-                if original_type_width <= current_type_width:
-                    data = original
-                    unitBits = binaryBitsFor(min(original), max(original))
+                base_type_width = max(8, binaryBitsFor(min(base), max(base)))
+                if base_type_width <= current_type_width:
+                    data = base
+                    unitBits = binaryBitsFor(min(base), max(base))
                     bias = 0
 
         self.unitBits = unitBits
         self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
+        self.identity = identity if type(self.minV) == int else False
+        if self.identity:
+            self.extraOps += 1
         self.bias = bias
         if bias:
             self.extraOps += 1

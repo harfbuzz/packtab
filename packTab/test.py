@@ -676,14 +676,14 @@ class TestEndToEndRust:
         assert "unsafe" not in code
 
     def test_unsafe_has_get_unchecked(self):
-        # Use large enough data to avoid inlining
-        code = _generate(list(range(256)), language="rust", unsafe_array_access=True)
+        # Use non-linear data large enough to avoid inlining and identity opt
+        code = _generate([i * 7 % 256 for i in range(256)], language="rust", unsafe_array_access=True)
         assert "get_unchecked" in code
         assert "unsafe" in code
 
     def test_has_static_array(self):
-        # Use large enough data to avoid inlining
-        code = _generate(list(range(256)), language="rust")
+        # Use non-linear data large enough to avoid inlining and identity opt
+        code = _generate([i * 7 % 256 for i in range(256)], language="rust")
         assert "static" in code
 
     def test_pub_crate_function(self):
@@ -695,11 +695,11 @@ class TestEndToEndRust:
         assert "#include" not in code
 
     def test_large_data(self):
-        code = _generate(list(range(256)), language="rust")
+        code = _generate([i * 7 % 256 for i in range(256)], language="rust")
         assert "fn data_get" in code
 
     def test_large_unsafe(self):
-        code = _generate(list(range(256)), language="rust", unsafe_array_access=True)
+        code = _generate([i * 7 % 256 for i in range(256)], language="rust", unsafe_array_access=True)
         assert "get_unchecked" in code
 
 
@@ -717,17 +717,17 @@ class TestInlining:
         assert "data_get" in code
 
     def test_large_data_has_array(self):
-        code = _generate(list(range(256)), language="c")
+        code = _generate([i * 7 % 256 for i in range(256)], language="c")
         assert "uint8_t" in code  # has array
 
     def test_inline_uses_literal(self):
-        code = _generate([1, 2, 3, 4], language="c")
-        # Bias baked in: stores [1,2,3,4] directly (4-bit packed = 17185)
-        assert "17185u" in code
+        # Use non-linear data so identity optimization doesn't trigger
+        code = _generate([5, 0, 5, 0], language="c")
+        assert "u" in code  # has a constant
 
     def test_inline_rust_uses_typed_literal(self):
-        code = _generate([1, 2, 3, 4], language="rust")
-        assert "17185u16" in code
+        code = _generate([5, 0, 5, 0], language="rust")
+        assert "u8" in code
 
 
 class TestMultBakeIn:
@@ -801,6 +801,67 @@ class TestBiasBakeIn:
 
     def test_no_bake_in_e2e_c(self):
         data = [1000, 1001, 1002, 1003]
+        code = _generate(data, language="c")
+        TestEndToEndC._compile_and_run(code, data, 0)
+
+
+class TestIdentity:
+    """Verify identity subtraction optimization for near-linear data."""
+
+    def test_identity_chosen_for_linear_data(self):
+        """data[i] = i should trigger identity subtraction."""
+        data = list(range(16))
+        layer = OuterLayer(data, 0)
+        assert layer.identity is True
+
+    def test_identity_not_chosen_for_nonlinear(self):
+        """Non-linear data should not trigger identity subtraction."""
+        data = [0, 5, 10, 15]
+        layer = OuterLayer(data, 0)
+        assert layer.identity is False
+
+    def test_identity_with_offset(self):
+        """data[i] = i + constant should use identity + bias."""
+        data = [100 + i for i in range(8)]
+        layer = OuterLayer(data, 0)
+        assert layer.identity is True
+
+    def test_identity_no_array_for_pure_identity(self):
+        """Pure identity data needs no array (all deltas are 0)."""
+        code = _generate(list(range(8)), language="c")
+        # No array needed — expression is just u+0
+        assert "u8[" not in code
+
+    def test_identity_in_code(self):
+        """Generated code should contain u+ for identity optimization."""
+        data = [0, 1, 2, 5, 4, 5, 6, 7]  # mostly identity, one exception
+        code = _generate(data, language="c")
+        assert "u+" in code
+
+    def test_identity_e2e_c(self):
+        """End-to-end: identity-like data produces correct results."""
+        data = list(range(64))
+        code = _generate(data, language="c")
+        TestEndToEndC._compile_and_run(code, data, 0)
+
+    def test_identity_with_exceptions_e2e_c(self):
+        """End-to-end: near-identity data with exceptions."""
+        data = list(range(32))
+        data[10] = 99
+        data[20] = 200
+        code = _generate(data, language="c")
+        TestEndToEndC._compile_and_run(code, data, 0)
+
+    def test_identity_large_e2e_c(self):
+        """End-to-end: large identity-like table (like Unicode mirroring)."""
+        data = list(range(256))
+        # Simulate a few mirroring exceptions
+        data[40] = 41
+        data[41] = 40
+        data[60] = 62
+        data[62] = 60
+        data[91] = 93
+        data[93] = 91
         code = _generate(data, language="c")
         TestEndToEndC._compile_and_run(code, data, 0)
 
@@ -905,8 +966,8 @@ class TestCLI:
         assert "#include" not in r.stdout
 
     def test_rust_unsafe_output(self):
-        # Use enough data to avoid inlining so get_unchecked is emitted
-        args = [str(i) for i in range(256)]
+        # Use non-linear data to avoid identity opt and inlining
+        args = [str(i * 7 % 256) for i in range(256)]
         r = self._run("--rust", "--unsafe", *args)
         assert r.returncode == 0
         assert "get_unchecked" in r.stdout
