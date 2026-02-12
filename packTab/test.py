@@ -7,7 +7,6 @@ import tempfile
 import pytest
 
 from packTab import (
-    Array,
     AutoMapping,
     Code,
     LanguageC,
@@ -187,50 +186,6 @@ class TestCombine:
         data = [100, 200, 50]
         result = _combine(data, 8)
         assert result == data
-
-
-class TestArrayOverlap:
-    def test_no_overlap(self):
-        a = Array("uint8_t")
-        a.extend([1, 2, 3])
-        start = a.extend([7, 8, 9])
-        assert start == 3
-        assert a.values == [1, 2, 3, 7, 8, 9]
-
-    def test_suffix_prefix(self):
-        a = Array("uint8_t")
-        a.extend([1, 2, 3, 4, 5])
-        start = a.extend([4, 5, 6, 7])
-        assert start == 3
-        assert a.values == [1, 2, 3, 4, 5, 6, 7]
-
-    def test_contained_in_middle(self):
-        a = Array("uint8_t")
-        a.extend([1, 2, 3, 4, 5, 6, 7, 8])
-        start = a.extend([3, 4, 5])
-        assert start == 2
-        assert len(a.values) == 8
-
-    def test_contained_as_suffix(self):
-        a = Array("uint8_t")
-        a.extend([1, 2, 3, 4, 5])
-        start = a.extend([4, 5])
-        assert start == 3
-        assert len(a.values) == 5
-
-    def test_exact_duplicate(self):
-        a = Array("uint8_t")
-        a.extend([1, 2, 3])
-        start = a.extend([1, 2, 3])
-        assert start == 0
-        assert len(a.values) == 3
-
-    def test_empty_extend(self):
-        a = Array("uint8_t")
-        a.extend([1, 2, 3])
-        start = a.extend([])
-        assert start == 0
-        assert a.values == [1, 2, 3]
 
 
 # ── Language backends ──────────────────────────────────────────────

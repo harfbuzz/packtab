@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# TODO:
+# - Byte reuse!  Much bigger work item.
+
 """
 Pack a static table of integers into compact lookup tables to save space.
 
@@ -446,20 +449,7 @@ class Array:
         self.values = []
 
     def extend(self, values):
-        existing = self.values
-        n = len(values)
-        # Check if values already appear as a contiguous subsequence.
-        for i in range(len(existing) - n + 1):
-            if existing[i : i + n] == values:
-                return i
-        # Try suffix-prefix overlap: reuse the longest existing suffix
-        # that matches a prefix of the new values.
-        for k in range(min(len(existing), n - 1), 0, -1):
-            if existing[len(existing) - k :] == values[:k]:
-                start = len(existing) - k
-                self.values.extend(values[k:])
-                return start
-        start = len(existing)
+        start = len(self.values)
         self.values.extend(values)
         return start
 
