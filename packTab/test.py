@@ -577,112 +577,207 @@ def _generate(data, default=0, language="c", **lang_kwargs):
     return buf.getvalue()
 
 
-class TestEndToEndC:
-    """Generate C code, compile, and verify correctness."""
+def _compile_and_run_c(c_code, data, default):
+    """Compile generated C and verify every index returns the right value."""
+    checks = []
+    for i, v in enumerate(data):
+        checks.append('  assert(data_get(%d) == %d);' % (i, v))
+    for i in range(len(data), len(data) + 5):
+        checks.append('  assert(data_get(%d) == %d);' % (i, default))
 
-    @staticmethod
-    def _compile_and_run(c_code, data, default):
-        """Compile generated C and verify every index returns the right value."""
-        # Build a main() that checks every value
-        checks = []
-        for i, v in enumerate(data):
-            checks.append('  assert(data_get(%d) == %d);' % (i, v))
-        # Check some indices beyond data return default
-        for i in range(len(data), len(data) + 5):
-            checks.append('  assert(data_get(%d) == %d);' % (i, default))
+    full = (
+        '#include <assert.h>\n'
+        '#include <stdio.h>\n'
+        + c_code
+        + '\nint main() {\n'
+        + '\n'.join(checks)
+        + '\n  printf("PASS\\n");\n  return 0;\n}\n'
+    )
 
-        full = (
-            '#include <assert.h>\n'
-            '#include <stdio.h>\n'
-            + c_code
-            + '\nint main() {\n'
-            + '\n'.join(checks)
-            + '\n  printf("PASS\\n");\n  return 0;\n}\n'
-        )
+    with tempfile.NamedTemporaryFile(suffix=".c", mode="w", delete=False) as f:
+        f.write(full)
+        src = f.name
+    out = src.replace(".c", "")
+    try:
+        subprocess.check_call(["cc", "-o", out, src, "-std=c99", "-Wall", "-Werror"],
+                              stderr=subprocess.PIPE)
+        result = subprocess.check_output([out]).decode().strip()
+        assert result == "PASS"
+    finally:
+        os.unlink(src)
+        if os.path.exists(out):
+            os.unlink(out)
 
-        with tempfile.NamedTemporaryFile(suffix=".c", mode="w", delete=False) as f:
-            f.write(full)
-            src = f.name
-        out = src.replace(".c", "")
-        try:
-            subprocess.check_call(["cc", "-o", out, src, "-std=c99", "-Wall", "-Werror"],
-                                  stderr=subprocess.PIPE)
-            result = subprocess.check_output([out]).decode().strip()
-            assert result == "PASS"
-        finally:
-            os.unlink(src)
-            if os.path.exists(out):
-                os.unlink(out)
 
-    def test_small(self):
+def _compile_and_run_rust(rs_code, data, default):
+    """Compile generated Rust and verify every index returns the right value."""
+    checks = []
+    for i, v in enumerate(data):
+        checks.append('    assert_eq!(data_get(%d) as i64, %di64);' % (i, v))
+    for i in range(len(data), len(data) + 5):
+        checks.append('    assert_eq!(data_get(%d) as i64, %di64);' % (i, default))
+
+    full = (
+        '#[allow(dead_code, unused_parens, overflowing_literals)]\n\n'
+        + rs_code
+        + '\nfn main() {\n'
+        + '\n'.join(checks)
+        + '\n    println!("PASS");\n}\n'
+    )
+
+    with tempfile.NamedTemporaryFile(suffix=".rs", mode="w", delete=False) as f:
+        f.write(full)
+        src = f.name
+    out = src.replace(".rs", "")
+    try:
+        subprocess.check_call(["rustc", "-o", out, src],
+                              stderr=subprocess.PIPE)
+        result = subprocess.check_output([out]).decode().strip()
+        assert result == "PASS"
+    finally:
+        os.unlink(src)
+        if os.path.exists(out):
+            os.unlink(out)
+
+
+def _compile_and_run(code, data, default, language):
+    """Compile and run generated code for the given language."""
+    if language == "c":
+        _compile_and_run_c(code, data, default)
+    elif language == "rust":
+        _compile_and_run_rust(code, data, default)
+    else:
+        raise ValueError("Unknown language: %s" % language)
+
+
+@pytest.fixture(params=["c", "rust"])
+def language(request):
+    return request.param
+
+
+class TestEndToEnd:
+    """Generate code, compile, and verify correctness for both C and Rust."""
+
+    def test_small(self, language):
         data = [1, 2, 3, 4]
-        code = _generate(data, language="c")
-        self._compile_and_run(code, data, 0)
+        code = _generate(data, language=language)
+        _compile_and_run(code, data, 0, language)
 
-    def test_ascending(self):
+    def test_ascending(self, language):
         data = list(range(32))
-        code = _generate(data, language="c")
-        self._compile_and_run(code, data, 0)
+        code = _generate(data, language=language)
+        _compile_and_run(code, data, 0, language)
 
-    def test_repeated_pattern(self):
+    def test_repeated_pattern(self, language):
         data = [0, 1, 2, 3] * 16
-        code = _generate(data, language="c")
-        self._compile_and_run(code, data, 0)
+        code = _generate(data, language=language)
+        _compile_and_run(code, data, 0, language)
 
-    def test_sparse(self):
+    def test_sparse(self, language):
         data = [0] * 100
         data[7] = 42
         data[50] = 99
         data[99] = 1
-        code = _generate(data, language="c")
-        self._compile_and_run(code, data, 0)
+        code = _generate(data, language=language)
+        _compile_and_run(code, data, 0, language)
 
-    def test_large_values(self):
+    def test_large_values(self, language):
         data = [0, 1000, 2000, 3000, 4000, 5000]
-        code = _generate(data, language="c")
-        self._compile_and_run(code, data, 0)
+        code = _generate(data, language=language)
+        _compile_and_run(code, data, 0, language)
 
-    def test_16bit_values(self):
+    def test_16bit_values(self, language):
         data = [i * 100 for i in range(64)]
-        code = _generate(data, language="c")
-        self._compile_and_run(code, data, 0)
+        code = _generate(data, language=language)
+        _compile_and_run(code, data, 0, language)
 
-    def test_nonzero_default(self):
+    def test_nonzero_default(self, language):
         data = [5, 5, 5, 10, 5]
-        code = _generate(data, default=5, language="c")
-        self._compile_and_run(code, data, 5)
+        code = _generate(data, default=5, language=language)
+        _compile_and_run(code, data, 5, language)
 
-    def test_256_values(self):
+    def test_256_values(self, language):
         data = list(range(256))
-        code = _generate(data, language="c")
-        self._compile_and_run(code, data, 0)
+        code = _generate(data, language=language)
+        _compile_and_run(code, data, 0, language)
 
-    def test_constant_nonzero(self):
+    def test_constant_nonzero(self, language):
         data = [42, 42, 42, 42]
-        code = _generate(data, default=0, language="c")
-        self._compile_and_run(code, data, 0)
+        code = _generate(data, default=0, language=language)
+        _compile_and_run(code, data, 0, language)
 
-    def test_two_values(self):
+    def test_two_values(self, language):
         data = [0, 1, 0, 1, 0, 1, 0, 1]
-        code = _generate(data, language="c")
-        self._compile_and_run(code, data, 0)
+        code = _generate(data, language=language)
+        _compile_and_run(code, data, 0, language)
+
+    def test_gcd_bake_in(self, language):
+        data = [0, 6, 12, 18, 24, 30]
+        code = _generate(data, language=language)
+        _compile_and_run(code, data, 0, language)
+
+    def test_gcd_no_bake_in(self, language):
+        data = [0, 128, 256, 384]
+        code = _generate(data, language=language)
+        _compile_and_run(code, data, 0, language)
+
+    def test_gcd_with_bias(self, language):
+        data = [100, 106, 112, 118]
+        code = _generate(data, language=language)
+        _compile_and_run(code, data, 0, language)
+
+    def test_bias_bake_in(self, language):
+        data = [100, 101, 102, 103, 104, 105]
+        code = _generate(data, language=language)
+        _compile_and_run(code, data, 0, language)
+
+    def test_bias_no_bake_in(self, language):
+        data = [1000, 1001, 1002, 1003]
+        code = _generate(data, language=language)
+        _compile_and_run(code, data, 0, language)
+
+    def test_identity(self, language):
+        data = list(range(64))
+        code = _generate(data, language=language)
+        _compile_and_run(code, data, 0, language)
+
+    def test_identity_with_exceptions(self, language):
+        data = list(range(32))
+        data[10] = 99
+        data[20] = 200
+        code = _generate(data, language=language)
+        _compile_and_run(code, data, 0, language)
+
+    def test_identity_negative_deltas(self, language):
+        data = [0, 1, 2, 3, 5, 4, 6, 7]
+        code = _generate(data, language=language)
+        _compile_and_run(code, data, 0, language)
+
+    def test_identity_large_mirroring(self, language):
+        data = list(range(256))
+        data[40] = 41
+        data[41] = 40
+        data[60] = 62
+        data[62] = 60
+        data[91] = 93
+        data[93] = 91
+        code = _generate(data, language=language)
+        _compile_and_run(code, data, 0, language)
 
 
 class TestEndToEndRust:
-    """Generate Rust code and verify string properties."""
+    """Rust-specific code generation checks."""
 
     def test_safe_no_unsafe_keyword(self):
         code = _generate([1, 2, 3, 4], language="rust")
         assert "unsafe" not in code
 
     def test_unsafe_has_get_unchecked(self):
-        # Use non-linear data large enough to avoid inlining and identity opt
         code = _generate([i * 7 % 256 for i in range(256)], language="rust", unsafe_array_access=True)
         assert "get_unchecked" in code
         assert "unsafe" in code
 
     def test_has_static_array(self):
-        # Use non-linear data large enough to avoid inlining and identity opt
         code = _generate([i * 7 % 256 for i in range(256)], language="rust")
         assert "static" in code
 
@@ -694,53 +789,34 @@ class TestEndToEndRust:
         code = _generate([1, 2, 3], language="rust")
         assert "#include" not in code
 
-    def test_large_data(self):
-        code = _generate([i * 7 % 256 for i in range(256)], language="rust")
-        assert "fn data_get" in code
-
-    def test_large_unsafe(self):
-        code = _generate([i * 7 % 256 for i in range(256)], language="rust", unsafe_array_access=True)
-        assert "get_unchecked" in code
-
 
 class TestInlining:
     """Verify that small arrays get inlined as integer constants."""
 
     def test_small_data_no_array(self):
         code = _generate([1, 2, 3, 4], language="c")
-        assert "data_u8[" not in code  # no array declaration
+        assert "data_u8[" not in code
         assert "data_get" in code
 
     def test_small_data_no_array_rust(self):
         code = _generate([1, 2, 3, 4], language="rust")
-        assert ": [u8;" not in code  # no array declaration
+        assert ": [u8;" not in code
         assert "data_get" in code
 
     def test_large_data_has_array(self):
         code = _generate([i * 7 % 256 for i in range(256)], language="c")
-        assert "uint8_t" in code  # has array
-
-    def test_inline_uses_literal(self):
-        # Use non-linear data so identity optimization doesn't trigger
-        code = _generate([5, 0, 5, 0], language="c")
-        assert "u" in code  # has a constant
-
-    def test_inline_rust_uses_typed_literal(self):
-        code = _generate([5, 0, 5, 0], language="rust")
-        assert "u8" in code
+        assert "uint8_t" in code
 
 
 class TestMultBakeIn:
     """Verify that width multiplier is baked in when type doesn't change."""
 
     def test_bake_in_small_gcd(self):
-        """GCD data where undivided values still fit in same C type."""
         data = [0, 4, 8, 12]
         layer = OuterLayer(data, 0)
-        assert layer.mult == 1  # baked in
+        assert layer.mult == 1
 
     def test_no_bake_in_type_change(self):
-        """GCD data where undivided values need a larger type."""
         data = [0, 128, 256, 384]
         layer = OuterLayer(data, 0)
         assert layer.mult == 128
@@ -748,41 +824,20 @@ class TestMultBakeIn:
     def test_bake_in_no_mult_in_code(self):
         code = _generate([0, 6, 12, 18], language="c")
         assert "6*" not in code
-        assert "data_get" in code
 
     def test_no_bake_in_has_mult_in_code(self):
         code = _generate([0, 128, 256, 384], language="c")
         assert "128*" in code
-
-    def test_bake_in_e2e_c(self):
-        """End-to-end: GCD data where multiplier is baked in."""
-        data = [0, 6, 12, 18, 24, 30]
-        code = _generate(data, language="c")
-        TestEndToEndC._compile_and_run(code, data, 0)
-
-    def test_no_bake_in_e2e_c(self):
-        """End-to-end: GCD data where multiplier is NOT baked in."""
-        data = [0, 128, 256, 384]
-        code = _generate(data, language="c")
-        TestEndToEndC._compile_and_run(code, data, 0)
-
-    def test_bake_in_with_bias_e2e_c(self):
-        """End-to-end: bias + GCD where multiplier is baked in."""
-        data = [100, 106, 112, 118]
-        code = _generate(data, language="c")
-        TestEndToEndC._compile_and_run(code, data, 0)
 
 
 class TestBiasBakeIn:
     """Verify that bias is baked in when type doesn't change."""
 
     def test_bake_in_small_bias(self):
-        """Bias data where original values still fit in same C type."""
         layer = OuterLayer([100, 101, 102, 103], 0)
-        assert layer.bias == 0  # baked in
+        assert layer.bias == 0
 
     def test_no_bake_in_type_change(self):
-        """Bias data where original values need a larger type."""
         layer = OuterLayer([1000, 1001, 1002, 1003], 0)
         assert layer.bias == 1000
 
@@ -791,92 +846,42 @@ class TestBiasBakeIn:
         assert "200+" not in code
 
     def test_no_bake_in_has_bias_in_code(self):
-        code = _generate([1000, 1001, 1002, 1003], language="c")
+        code = _generate([1000, 1003, 1001, 1002], language="c")
         assert "1000+" in code
-
-    def test_bake_in_e2e_c(self):
-        data = [100, 101, 102, 103, 104, 105]
-        code = _generate(data, language="c")
-        TestEndToEndC._compile_and_run(code, data, 0)
-
-    def test_no_bake_in_e2e_c(self):
-        data = [1000, 1001, 1002, 1003]
-        code = _generate(data, language="c")
-        TestEndToEndC._compile_and_run(code, data, 0)
 
 
 class TestIdentity:
     """Verify identity subtraction optimization for near-linear data."""
 
     def test_identity_chosen_for_linear_data(self):
-        """data[i] = i should trigger identity subtraction."""
         data = list(range(16))
         layer = OuterLayer(data, 0)
         assert layer.identity is True
 
     def test_identity_not_chosen_for_nonlinear(self):
-        """Non-linear data should not trigger identity subtraction."""
         data = [0, 5, 10, 15]
         layer = OuterLayer(data, 0)
         assert layer.identity is False
 
     def test_identity_with_offset(self):
-        """data[i] = i + constant should use identity + bias."""
         data = [100 + i for i in range(8)]
         layer = OuterLayer(data, 0)
         assert layer.identity is True
 
     def test_identity_no_array_for_pure_identity(self):
-        """Pure identity data needs no array (all deltas are 0)."""
         code = _generate(list(range(8)), language="c")
-        # No array needed — expression is just u+0
         assert "u8[" not in code
 
     def test_identity_in_code(self):
-        """Generated code should contain u+ for identity optimization."""
-        data = [0, 1, 2, 5, 4, 5, 6, 7]  # mostly identity, one exception
+        data = [0, 1, 2, 5, 4, 5, 6, 7]
         code = _generate(data, language="c")
-        assert "u+" in code
-
-    def test_identity_negative_deltas_e2e_c(self):
-        """Negative deltas (data[i] < i) must not produce negative unsigned literals."""
-        data = [0, 1, 2, 3, 5, 4, 6, 7]  # swapped 4↔5, delta at 5 is -1
-        code = _generate(data, language="c")
-        TestEndToEndC._compile_and_run(code, data, 0)
-
-    def test_identity_e2e_c(self):
-        """End-to-end: identity-like data produces correct results."""
-        data = list(range(64))
-        code = _generate(data, language="c")
-        TestEndToEndC._compile_and_run(code, data, 0)
-
-    def test_identity_with_exceptions_e2e_c(self):
-        """End-to-end: near-identity data with exceptions."""
-        data = list(range(32))
-        data[10] = 99
-        data[20] = 200
-        code = _generate(data, language="c")
-        TestEndToEndC._compile_and_run(code, data, 0)
-
-    def test_identity_large_e2e_c(self):
-        """End-to-end: large identity-like table (like Unicode mirroring)."""
-        data = list(range(256))
-        # Simulate a few mirroring exceptions
-        data[40] = 41
-        data[41] = 40
-        data[60] = 62
-        data[62] = 60
-        data[91] = 93
-        data[93] = 91
-        code = _generate(data, language="c")
-        TestEndToEndC._compile_and_run(code, data, 0)
+        assert "(u)+" in code
 
 
 class TestStringData:
     """Verify that string data without a mapping stores identifiers verbatim."""
 
     def test_string_values_verbatim_in_array(self):
-        """String values should appear as C identifiers in the generated array."""
         data = ["CAT_A", "CAT_B", "CAT_C", "CAT_A"]
         solution = pack_table(data, default="CAT_NONE", compression=1)
         code = Code("test")
@@ -884,14 +889,12 @@ class TestStringData:
         out = io.StringIO()
         code.print_code(file=out, language="c")
         output = out.getvalue()
-        # Strings should appear verbatim as C identifiers, not as integer IDs
         assert "CAT_A" in output
         assert "CAT_B" in output
         assert "CAT_C" in output
         assert "CAT_NONE" in output
 
     def test_string_default_in_ternary(self):
-        """The string default should appear in the ternary expression."""
         data = ["X", "Y"]
         solution = pack_table(data, default="Z", compression=1)
         code = Code("test")
@@ -902,7 +905,6 @@ class TestStringData:
         assert "Z" in output
 
     def test_string_with_mapping(self):
-        """String data with an explicit mapping should produce integer code."""
         mapping = {"CAT_A": 0, "CAT_B": 1, "CAT_C": 2}
         data = ["CAT_A", "CAT_B", "CAT_C", "CAT_A"]
         solution = pack_table(data, default="CAT_A", compression=1, mapping=mapping)
@@ -911,11 +913,9 @@ class TestStringData:
         out = io.StringIO()
         code.print_code(file=out, language="c")
         output = out.getvalue()
-        # With a mapping, strings should be converted to their integer values
         assert "CAT_A" not in output
 
     def test_string_no_inline(self):
-        """Small string data should NOT be inlined (can't bit-pack identifiers)."""
         data = ["A", "B"]
         solution = pack_table(data, default="C", compression=1)
         code = Code("test")
@@ -923,24 +923,7 @@ class TestStringData:
         out = io.StringIO()
         code.print_code(file=out, language="c")
         output = out.getvalue()
-        # Should have an array, not an inlined constant
         assert "u8[" in output or "u8 " in output
-
-
-class TestEndToEndBothLanguages:
-    """Verify that the same input produces valid output in both languages."""
-
-    @pytest.mark.parametrize("data", [
-        [1, 2, 3, 4],
-        list(range(16)),
-        [0, 0, 0, 1],
-        [100, 200, 50, 150],
-    ])
-    def test_both_languages_produce_output(self, data):
-        for lang in ("c", "rust"):
-            code = _generate(data, language=lang)
-            assert len(code) > 0
-            assert "data_get" in code
 
 
 # ── CLI ────────────────────────────────────────────────────────────

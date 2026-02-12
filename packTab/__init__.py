@@ -245,6 +245,12 @@ class Language:
             return ''
         return "%s%s" % (value, self.usize_suffix)
 
+    def wrapping_add(self, a, b):
+        return "%s+%s" % (a, b)
+
+    def wrapping_sub(self, a, b):
+        return "%s-%s" % (a, b)
+
     def uint_literal(self, value, typ):
         return str(value)
 
@@ -434,6 +440,12 @@ class LanguageRust(Language):
 
     def uint_literal(self, value, typ):
         return "%d%s" % (value, typ)
+
+    def wrapping_add(self, a, b):
+        return "(%s).wrapping_add(%s)" % (a, b)
+
+    def wrapping_sub(self, a, b):
+        return "(%s).wrapping_sub(%s)" % (a, b)
 
     def return_stmt(self, expr):
         return expr
@@ -679,7 +691,7 @@ class InnerSolution(Solution):
         unitBits = self.layer.unitBits
         if not unitBits:
             # All values are identical (maxV == 0); return the constant.
-            expr = self.layer.data[0]
+            expr = str(self.layer.data[0])
             return (retType, expr)
 
         shift = self.bits
@@ -964,15 +976,29 @@ class OuterSolution(Solution):
         retType = fastType(typ)
         if self.next:
             (_, expr) = self.next.genCode(code, None, var, language=language)
+            # Cast inner result to return type so that mult/bias arithmetic
+            # happens at the correct width.  Rust requires this because it
+            # has no implicit integer widening or narrowing.
+            expr = language.cast(retType, expr)
 
         if self.layer.mult != 1:
             expr = "%d*%s" % (self.layer.mult, expr)
         if self.layer.identity:
-            expr = "%s+%s" % (var, expr)
-        if self.layer.bias != 0:
-            if self.layer.bias < 0:
-                expr = language.cast(retType, expr)
-            expr = "%d+%s" % (self.layer.bias, expr)
+            # Identity subtraction (data[i] = i + delta): intermediate
+            # arithmetic can wrap the unsigned return type (e.g. 255u8 + 2u8).
+            # C unsigned wraps naturally; Rust needs explicit wrapping_add/sub.
+            expr = language.wrapping_add(language.cast(retType, var), expr)
+            if self.layer.bias > 0:
+                expr = language.wrapping_add(
+                    language.uint_literal(self.layer.bias, retType), expr)
+            elif self.layer.bias < 0:
+                expr = language.wrapping_sub(
+                    expr, language.uint_literal(-self.layer.bias, retType))
+        else:
+            if self.layer.bias > 0:
+                expr = "%d+%s" % (self.layer.bias, expr)
+            elif self.layer.bias < 0:
+                expr = "%s-%d" % (expr, -self.layer.bias)
 
         expr = language.tertiary(
             "%s<%s" % (var, len(self.layer.data)), expr, self.layer.default
