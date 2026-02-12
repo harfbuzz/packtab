@@ -12,57 +12,64 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import print_function, division, absolute_import
 from . import *
-from . import log2
+import argparse
 import sys
-import unicodedata as ucd
-
-if sys.version_info[0] < 3:
-    if sys.maxunicode < 0x10FFFF:
-        # workarounds for Python 2 "narrow" builds with UCS2-only support.
-
-        _narrow_unichr = unichr
-
-        def unichr(i):
-            try:
-                return _narrow_unichr(i)
-            except ValueError:
-                try:
-                    padded_hex_str = hex(i)[2:].zfill(8)
-                    escape_str = "\\U" + padded_hex_str
-                    return escape_str.decode("unicode-escape")
-                except UnicodeDecodeError:
-                    raise ValueError("unichr() arg not in range(0x110000)")
-
-    chr = unichr
 
 
-def main(args=sys.argv):
-    if len(args) == 1:
-        print("usage: packTab [--rust] [--unsafe] data...")
-        return 1
+def main(args=None):
+    parser = argparse.ArgumentParser(
+        prog="packTab",
+        description="Pack a list of integers into compact lookup tables.",
+    )
+    parser.add_argument(
+        "data", nargs="+", type=int, help="integer data values to pack"
+    )
+    parser.add_argument(
+        "--language",
+        choices=["c", "rust"],
+        default="c",
+        help="output language (default: c)",
+    )
+    # Keep --rust as a shorthand for --language=rust.
+    parser.add_argument(
+        "--rust", action="store_true", help="shorthand for --language=rust"
+    )
+    parser.add_argument(
+        "--unsafe",
+        action="store_true",
+        help="use unsafe array access (Rust only)",
+    )
+    parser.add_argument(
+        "--default",
+        type=int,
+        default=0,
+        help="default value for out-of-range indices (default: 0)",
+    )
+    parser.add_argument(
+        "--compression",
+        type=float,
+        default=1,
+        help="size vs speed tradeoff; higher = smaller tables (default: 1)",
+    )
+    parser.add_argument(
+        "--name",
+        default="data",
+        help="namespace prefix for generated symbols (default: data)",
+    )
 
-    language = "c"
-    if args[1] == "--rust":
-        language = "rust"
-        args = args[1:]
+    parsed = parser.parse_args(args)
 
-    unsafe = False
-    if args[1] == "--unsafe":
-        unsafe = True
-        args = args[1:]
+    language = "rust" if parsed.rust else parsed.language
 
-    data = [int(v) for v in args[1:]]
-    default = 0
-    compression = 1
+    solution = pack_table(
+        parsed.data, parsed.default, compression=parsed.compression
+    )
 
-    solution = pack_table(data, default, compression=compression)
+    lang = languageClasses[language](unsafe_array_access=parsed.unsafe)
 
-    lang = languageClasses[language](unsafe_array_access=unsafe)
-
-    code = Code("data")
-    expr = solution.genCode(code, "get", language=lang, private=False)
+    code = Code(parsed.name)
+    solution.genCode(code, "get", language=lang, private=False)
     code.print_code(language=lang)
 
     return 0

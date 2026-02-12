@@ -945,10 +945,10 @@ class TestCLI:
         )
         return result
 
-    def test_no_args_returns_1(self):
+    def test_no_args_shows_usage(self):
         r = self._run()
-        assert r.returncode == 1
-        assert "usage" in r.stdout
+        assert r.returncode != 0
+        assert "usage" in r.stderr.lower()
 
     def test_c_output(self):
         r = self._run("1", "2", "3", "4")
@@ -962,9 +962,29 @@ class TestCLI:
         assert "fn data_get" in r.stdout
         assert "#include" not in r.stdout
 
+    def test_language_flag(self):
+        r = self._run("--language", "rust", "1", "2", "3", "4")
+        assert r.returncode == 0
+        assert "fn data_get" in r.stdout
+
     def test_rust_unsafe_output(self):
         # Use non-linear data to avoid identity opt and inlining
         args = [str(i * 7 % 256) for i in range(256)]
         r = self._run("--rust", "--unsafe", *args)
         assert r.returncode == 0
         assert "get_unchecked" in r.stdout
+
+    def test_default_flag(self):
+        r = self._run("--default", "99", "1", "2", "3")
+        assert r.returncode == 0
+        assert "99" in r.stdout
+
+    def test_name_flag(self):
+        r = self._run("--name", "my_table", "1", "2", "3")
+        assert r.returncode == 0
+        assert "my_table_get" in r.stdout
+
+    def test_help(self):
+        r = self._run("--help")
+        assert r.returncode == 0
+        assert "packTab" in r.stdout
