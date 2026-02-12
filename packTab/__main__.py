@@ -69,6 +69,13 @@ def main(args=None):
         action="store_true",
         help="treat data as sparse: 'index:value' pairs (requires --default)",
     )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        metavar="FILE",
+        help="write output to FILE instead of stdout",
+    )
 
     parsed = parser.parse_args(args)
 
@@ -177,7 +184,13 @@ def main(args=None):
 
     code = Code(parsed.name)
     solution.genCode(code, "get", language=lang, private=False)
-    code.print_code(language=lang)
+
+    # Handle output file
+    if parsed.output:
+        with open(parsed.output, "w") as f:
+            code.print_code(language=lang, file=f)
+    else:
+        code.print_code(language=lang)
 
     return 0
 
