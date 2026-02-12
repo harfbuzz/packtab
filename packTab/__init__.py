@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# TODO:
+# - Byte reuse!  Much bigger work item.
 
 """
 Pack a static table of integers into compact lookup tables to save space.
@@ -717,58 +719,14 @@ class InnerSolution(Solution):
         # be inlined (negative values would produce invalid unsigned literals).
         can_inline = len(data) * 8 <= 64 and all(isinstance(v, int) and v >= 0 for v in data)
 
-        # Try byte sharing: overlap expansion blocks to reduce array size.
-        # Only for multi-level solutions with enough data per block.
-        sharing = False
-        if layers and not can_inline:
-            num_blocks = layer.maxV + 1
-            block_elem_size = len(data) // num_blocks if num_blocks else 0
-            if block_elem_size >= 2 and num_blocks >= 2:
-                blocks = [
-                    tuple(data[i * block_elem_size : (i + 1) * block_elem_size])
-                    for i in range(num_blocks)
-                ]
-                compacted, elem_offsets = _overlap_compact(blocks)
-
-                # Convert element offsets to raw-value offsets for the index
-                # expression (sub-byte accessor expects raw-value indices).
-                values_per_elem = (1 << shift) // block_elem_size
-                raw_offsets = [off * values_per_elem for off in elem_offsets]
-
-                # Only use sharing if compacted data + offset array is smaller.
-                offset_max = max(raw_offsets)
-                offset_type_bits = max(8, binaryBitsFor(0, offset_max))
-                offset_bytes = num_blocks * offset_type_bits // 8
-                data_elem_bytes = typeWidth(typ) // 8
-                saved = (len(data) - len(compacted)) * data_elem_bytes - offset_bytes
-                if saved > 0:
-                    sharing = True
-                    data = compacted
-
         if not can_inline:
             arrName, start = code.addArray(typ, typeAbbr(typ), data)
 
         # Build the index expression.  For a multi-level solution:
         #   index = (child_expr << shift) | (var & mask)
-        # With byte sharing:
-        #   index = offset_array[child_expr] + (var & mask)
         # For a single-level solution (shift == 0): index = var.
 
-        if sharing:
-            offset_typ = language.type_for(0, offset_max)
-            offsetArrName, offsetStart = code.addArray(
-                offset_typ, "off", raw_offsets
-            )
-            offset_idx = language.as_usize(expr)
-            if offsetStart:
-                offset_idx = "%s+%s" % (
-                    language.usize_literal(offsetStart),
-                    offset_idx,
-                )
-            index0 = language.as_usize(
-                language.array_index(offsetArrName, offset_idx)
-            )
-        elif expr == "0":
+        if expr == "0":
             index0 = ""
         elif shift == 0:
             index0 = str(expr)
@@ -874,93 +832,6 @@ def _combine2(data, f):
     for first in it:
         data2.append(f(first, next(it, 0)))
     return data2
-
-
-def _overlap(a, b):
-    """Longest k such that a[-k:] == b[:k], with 0 < k < len."""
-    max_k = min(len(a), len(b)) - 1
-    for k in range(max_k, 0, -1):
-        if a[len(a) - k :] == b[:k]:
-            return k
-    return 0
-
-
-def _overlap_compact(blocks):
-    """Compact equal-size blocks by overlapping shared suffixes/prefixes.
-
-    Uses a greedy shortest-superstring approximation: repeatedly merge
-    the pair with the longest suffix-prefix overlap.
-
-    Args:
-        blocks: list of tuples, each the same length.
-
-    Returns:
-        (data, offsets): compacted element list and per-block element offsets.
-    """
-    if not blocks:
-        return [], []
-
-    block_len = len(blocks[0])
-
-    # Deduplicate
-    unique = []
-    seen = {}
-    orig_to_unique = []
-    for b in blocks:
-        bt = tuple(b)
-        if bt not in seen:
-            seen[bt] = len(unique)
-            unique.append(bt)
-        orig_to_unique.append(seen[bt])
-
-    N = len(unique)
-    if N <= 1:
-        return list(unique[0]), [0] * len(blocks)
-
-    # Pairwise overlaps
-    ov = [[0] * N for _ in range(N)]
-    for i in range(N):
-        for j in range(N):
-            if i != j:
-                ov[i][j] = _overlap(unique[i], unique[j])
-
-    # Greedy: pick max-overlap edges forming a Hamiltonian path
-    edges = sorted(
-        ((ov[i][j], i, j) for i in range(N) for j in range(N) if i != j and ov[i][j] > 0),
-        reverse=True,
-    )
-
-    succ = [None] * N
-    pred = [None] * N
-    for overlap_val, i, j in edges:
-        if succ[i] is not None or pred[j] is not None:
-            continue
-        # Check cycle: follow j's chain to see if it ends at i
-        cur = j
-        while succ[cur] is not None:
-            cur = succ[cur]
-        if cur == i:
-            continue
-        succ[i] = j
-        pred[j] = i
-
-    # Build compacted data from chains
-    data = []
-    unique_offsets = [0] * N
-    for s in range(N):
-        if pred[s] is not None:
-            continue  # not a chain start
-        cur = s
-        unique_offsets[cur] = len(data)
-        data.extend(unique[cur])
-        while succ[cur] is not None:
-            nxt = succ[cur]
-            unique_offsets[nxt] = len(data) - ov[cur][nxt]
-            data.extend(unique[nxt][ov[cur][nxt] :])
-            cur = nxt
-
-    offsets = [unique_offsets[orig_to_unique[i]] for i in range(len(blocks))]
-    return data, offsets
 
 
 class Layer:

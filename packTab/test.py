@@ -22,8 +22,6 @@ from packTab import (
     fastType,
     _combine,
     _combine2,
-    _overlap,
-    _overlap_compact,
     InnerLayer,
     OuterLayer,
     InnerSolution,
@@ -188,65 +186,6 @@ class TestCombine:
         data = [100, 200, 50]
         result = _combine(data, 8)
         assert result == data
-
-
-class TestOverlap:
-    def test_no_overlap(self):
-        assert _overlap((1, 2, 3), (4, 5, 6)) == 0
-
-    def test_full_different(self):
-        assert _overlap((1, 2, 3), (1, 2, 3)) == 0  # overlap < len
-
-    def test_suffix_prefix(self):
-        assert _overlap((1, 2, 3), (2, 3, 4)) == 2
-
-    def test_single_overlap(self):
-        assert _overlap((1, 2, 3), (3, 4, 5)) == 1
-
-
-class TestOverlapCompact:
-    def test_empty(self):
-        data, offsets = _overlap_compact([])
-        assert data == []
-        assert offsets == []
-
-    def test_single_block(self):
-        data, offsets = _overlap_compact([(1, 2, 3)])
-        assert data == [1, 2, 3]
-        assert offsets == [0]
-
-    def test_identical_blocks(self):
-        data, offsets = _overlap_compact([(1, 2), (1, 2), (1, 2)])
-        assert data == [1, 2]
-        assert offsets == [0, 0, 0]
-
-    def test_no_overlap(self):
-        data, offsets = _overlap_compact([(1, 2), (3, 4)])
-        assert len(data) == 4
-        # Both blocks present, no sharing
-        for i, blk in enumerate([(1, 2), (3, 4)]):
-            assert tuple(data[offsets[i] : offsets[i] + 2]) == blk
-
-    def test_suffix_prefix_overlap(self):
-        data, offsets = _overlap_compact([(1, 2, 3), (2, 3, 4)])
-        assert data == [1, 2, 3, 4]
-        assert offsets[0] == 0
-        assert offsets[1] == 1
-
-    def test_chain_overlap(self):
-        # A=[1,2,3], B=[2,3,4], C=[3,4,5]: chain A-B-C = [1,2,3,4,5]
-        blocks = [(1, 2, 3), (2, 3, 4), (3, 4, 5)]
-        data, offsets = _overlap_compact(blocks)
-        assert data == [1, 2, 3, 4, 5]
-        for i, blk in enumerate(blocks):
-            assert tuple(data[offsets[i] : offsets[i] + 3]) == blk
-
-    def test_duplicate_with_overlap(self):
-        blocks = [(1, 2, 3), (2, 3, 4), (1, 2, 3)]
-        data, offsets = _overlap_compact(blocks)
-        assert offsets[0] == offsets[2]  # duplicates share
-        for i, blk in enumerate(blocks):
-            assert tuple(data[offsets[i] : offsets[i] + 3]) == blk
 
 
 # ── Language backends ──────────────────────────────────────────────
@@ -831,17 +770,6 @@ class TestEndToEnd:
         data[91] = 93
         data[93] = 91
         code = _generate(data, language=language)
-        _compile_and_run(code, data, 0, language)
-
-    def test_byte_sharing(self, language):
-        """Data that triggers byte sharing (overlapping expansion blocks)."""
-        data = [ord(c) % 256 for c in "The quick brown fox jumps over the lazy dog. " * 50]
-        code = _generate(data, language=language)
-        # Verify byte sharing was used: offset array should be present.
-        if language == "c":
-            assert "data_off" in code
-        elif language == "rust":
-            assert "data_off" in code
         _compile_and_run(code, data, 0, language)
 
 
