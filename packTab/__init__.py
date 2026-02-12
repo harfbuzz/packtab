@@ -15,8 +15,6 @@
 # TODO:
 # - Bake in width multiplier into array data if doing so doesn't enlarge
 #   data type.  Again, that would save ops.
-# - If an array is not larger than 64 bits, inline it in code directly
-#   as one integer.
 # - Currently we only cull array of defaults at the end.  Do it at
 #   beginning as well, and adjust split code to find optimum shift.
 # - Byte reuse!  Much bigger work item.
@@ -157,6 +155,9 @@ class Language:
             return ''
         return "%s%s" % (value, self.usize_suffix)
 
+    def uint_literal(self, value, typ):
+        return str(value)
+
 
 class LanguageC(Language):
     name = "c"
@@ -233,6 +234,11 @@ class LanguageC(Language):
             return "int64_t"
 
         assert False
+
+    def uint_literal(self, value, typ):
+        if "64" in typ:
+            return "%dULL" % value
+        return "%du" % value
 
     def as_usize(self, expr):
         return expr
@@ -335,6 +341,9 @@ class LanguageRust(Language):
         if self.unsafe_array_access:
             return "unsafe { *(%s.get_unchecked(%s)) }" % (name, index)
         return "%s[%s]" % (name, index)
+
+    def uint_literal(self, value, typ):
+        return "%d%s" % (value, typ)
 
     def return_stmt(self, expr):
         return expr
@@ -546,11 +555,14 @@ class InnerSolution(Solution):
 
         data = _combine(data, self.layer.unitBits)
 
-        arrName, start = code.addArray(typ, typeAbbr(typ), data)
+        # Check if data can be inlined as a single integer constant.
+        can_inline = len(data) * 8 <= 64
+
+        if not can_inline:
+            arrName, start = code.addArray(typ, typeAbbr(typ), data)
 
         # Generate expression.
 
-        start = language.usize_literal(start) if start else None
         if expr == "0":
             index0 = ""
         elif shift == 0:
@@ -559,11 +571,27 @@ class InnerSolution(Solution):
             index0 = "((%s)<<%d)" % (language.as_usize(expr), shift)
         index1 = "((%s)&%s)" % (var, mask) if mask else ""
         index = language.as_usize(index0) + ("+" if index0 and index1 else "") + language.as_usize(index1)
-        if unitBits >= 8:
+
+        if can_inline:
+            packed = 0
+            for i, b in enumerate(data):
+                packed |= b << (i * 8)
+            const_typ = language.type_for(0, (1 << (len(data) * 8)) - 1)
+            lit = language.uint_literal(packed, const_typ)
+            elementMask = (1 << unitBits) - 1
+            shift2 = int(round(log2(unitBits))) if unitBits > 1 else 0
+            idx = language.as_usize(index)
+            if shift2:
+                expr = "((%s>>((%s)<<%d))&%d)" % (lit, idx, shift2, elementMask)
+            else:
+                expr = "((%s>>(%s))&%d)" % (lit, idx, elementMask)
+        elif unitBits >= 8:
+            start = language.usize_literal(start) if start else None
             if start:
                 index = "%s+%s" % (start, language.as_usize(index))
             expr = language.array_index(arrName, index)
         else:
+            start = language.usize_literal(start) if start else None
             shift1 = int(round(log2(8 // unitBits)))
             mask1 = (8 // unitBits) - 1
             shift2 = int(round(log2(unitBits)))

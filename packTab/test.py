@@ -661,12 +661,14 @@ class TestEndToEndRust:
         assert "unsafe" not in code
 
     def test_unsafe_has_get_unchecked(self):
-        code = _generate([1, 2, 3, 4], language="rust", unsafe_array_access=True)
+        # Use large enough data to avoid inlining
+        code = _generate(list(range(256)), language="rust", unsafe_array_access=True)
         assert "get_unchecked" in code
         assert "unsafe" in code
 
     def test_has_static_array(self):
-        code = _generate([1, 2, 3], language="rust")
+        # Use large enough data to avoid inlining
+        code = _generate(list(range(256)), language="rust")
         assert "static" in code
 
     def test_pub_crate_function(self):
@@ -684,6 +686,32 @@ class TestEndToEndRust:
     def test_large_unsafe(self):
         code = _generate(list(range(256)), language="rust", unsafe_array_access=True)
         assert "get_unchecked" in code
+
+
+class TestInlining:
+    """Verify that small arrays get inlined as integer constants."""
+
+    def test_small_data_no_array(self):
+        code = _generate([1, 2, 3, 4], language="c")
+        assert "data_u8[" not in code  # no array declaration
+        assert "data_get" in code
+
+    def test_small_data_no_array_rust(self):
+        code = _generate([1, 2, 3, 4], language="rust")
+        assert ": [u8;" not in code  # no array declaration
+        assert "data_get" in code
+
+    def test_large_data_has_array(self):
+        code = _generate(list(range(256)), language="c")
+        assert "uint8_t" in code  # has array
+
+    def test_inline_uses_literal(self):
+        code = _generate([1, 2, 3, 4], language="c")
+        assert "228u" in code  # inlined constant
+
+    def test_inline_rust_uses_typed_literal(self):
+        code = _generate([1, 2, 3, 4], language="rust")
+        assert "228u8" in code
 
 
 class TestEndToEndBothLanguages:
@@ -731,6 +759,8 @@ class TestCLI:
         assert "#include" not in r.stdout
 
     def test_rust_unsafe_output(self):
-        r = self._run("--rust", "--unsafe", "1", "2", "3", "4")
+        # Use enough data to avoid inlining so get_unchecked is emitted
+        args = [str(i) for i in range(256)]
+        r = self._run("--rust", "--unsafe", *args)
         assert r.returncode == 0
         assert "get_unchecked" in r.stdout
