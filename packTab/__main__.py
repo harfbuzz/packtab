@@ -23,8 +23,8 @@ def main(args=None):
         description="Pack a list of integers into compact lookup tables.",
     )
     parser.add_argument(
-        "data", nargs="*", type=int,
-        help="integer data values to pack (reads from stdin if not provided)"
+        "data", nargs="*",
+        help="integer data values to pack, or index:value pairs with --sparse (reads from stdin if not provided)"
     )
     parser.add_argument(
         "--language",
@@ -63,6 +63,11 @@ def main(args=None):
         action="store_true",
         help="show compression statistics instead of generating code",
     )
+    parser.add_argument(
+        "--sparse",
+        action="store_true",
+        help="treat data as sparse: 'index:value' pairs (requires --default)",
+    )
 
     parsed = parser.parse_args(args)
 
@@ -72,13 +77,38 @@ def main(args=None):
         stdin_text = sys.stdin.read().strip()
         if not stdin_text:
             parser.error("no data provided (either as arguments or via stdin)")
-        # Parse integers from stdin (whitespace-separated)
+        parsed.data = stdin_text.split()
+
+    # Handle sparse data format
+    if parsed.sparse:
+        # Parse index:value pairs
+        sparse_dict = {}
         try:
-            parsed.data = [int(x) for x in stdin_text.split()]
+            for item in parsed.data:
+                if ':' not in item:
+                    parser.error(f"--sparse requires 'index:value' format, got: {item}")
+                index_str, value_str = item.split(':', 1)
+                index = int(index_str)
+                value = int(value_str)
+                if index < 0:
+                    parser.error(f"negative index not allowed: {index}")
+                sparse_dict[index] = value
         except ValueError as e:
-            parser.error(f"invalid integer in stdin: {e}")
+            parser.error(f"invalid index:value pair: {e}")
+
+        if not sparse_dict:
+            parser.error("no sparse data provided")
+
+        # Convert sparse dict to list using pack_table's dict support
+        parsed.data = sparse_dict
+    else:
+        # Parse as regular integers
+        try:
+            parsed.data = [int(x) for x in parsed.data]
+        except ValueError as e:
+            parser.error(f"invalid integer in data: {e}")
         if not parsed.data:
-            parser.error("no data provided in stdin")
+            parser.error("no data provided")
 
     language = "rust" if parsed.rust else parsed.language
 
@@ -88,10 +118,17 @@ def main(args=None):
             parsed.data, parsed.default, compression=None
         )
 
-        original_size = len(parsed.data)
+        # Handle both list and dict input
+        if isinstance(parsed.data, dict):
+            original_size = max(parsed.data.keys()) + 1 if parsed.data else 0
+            values = list(parsed.data.values())
+        else:
+            original_size = len(parsed.data)
+            values = parsed.data
+
         # Calculate bits needed for the data range
-        minV = min(parsed.data)
-        maxV = max(parsed.data)
+        minV = min(values) if values else 0
+        maxV = max(values) if values else 0
         bits_needed = binaryBitsFor(minV, maxV)
         # Round up to next byte boundary for original storage
         original_bytes = original_size * max(1, (bits_needed + 7) // 8)
