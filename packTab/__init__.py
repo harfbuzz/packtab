@@ -1292,8 +1292,13 @@ def pack_table(
 
     # Set up mapping.  See docstring.
     if mapping is not None:
-        # assert (all(isinstance(k, int) and not isinstance(v, int) for k,v in mapping.items()) or  # noqa: E501
-        #        all(not isinstance(k, int) and isinstance(v, int) for k,v in mapping.items()))  # noqa: E501
+        # Validate mapping is consistently int→str or str→int
+        if not mapping:
+            raise ValueError("mapping must not be empty")
+        int_to_nonint = all(isinstance(k, int) and not isinstance(v, int) for k, v in mapping.items())
+        nonint_to_int = all(not isinstance(k, int) and isinstance(v, int) for k, v in mapping.items())
+        if not (int_to_nonint or nonint_to_int):
+            raise TypeError("mapping must be consistently int→str or str→int, not mixed")
         mapping2 = mapping.copy()
         for k, v in mapping.items():
             mapping2[v] = k

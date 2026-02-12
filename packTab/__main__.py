@@ -227,7 +227,7 @@ def main(args=None):
         return 0
 
     # Normal code generation path
-    solution = pack_table(parsed.data, parsed.default, compression=parsed.compression)
+    solution = pack_table(parsed.data, parsed.default, compression=compression_values[0])
 
     lang = languageClasses[language](unsafe_array_access=parsed.unsafe)
 
