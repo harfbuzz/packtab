@@ -23,7 +23,8 @@ def main(args=None):
         description="Pack a list of integers into compact lookup tables.",
     )
     parser.add_argument(
-        "data", nargs="+", type=int, help="integer data values to pack"
+        "data", nargs="*", type=int,
+        help="integer data values to pack (reads from stdin if not provided)"
     )
     parser.add_argument(
         "--language",
@@ -64,6 +65,20 @@ def main(args=None):
     )
 
     parsed = parser.parse_args(args)
+
+    # Read data from stdin if not provided on command line
+    if not parsed.data:
+        import sys
+        stdin_text = sys.stdin.read().strip()
+        if not stdin_text:
+            parser.error("no data provided (either as arguments or via stdin)")
+        # Parse integers from stdin (whitespace-separated)
+        try:
+            parsed.data = [int(x) for x in stdin_text.split()]
+        except ValueError as e:
+            parser.error(f"invalid integer in stdin: {e}")
+        if not parsed.data:
+            parser.error("no data provided in stdin")
 
     language = "rust" if parsed.rust else parsed.language
 
