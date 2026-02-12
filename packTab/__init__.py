@@ -368,6 +368,12 @@ class LanguageRust(Language):
         args = ", ".join("%s: %s" % (n, t) for t, n in args)
         return "%sfn %s (%s) -> %s" % (linkage, name, args, retType)
 
+    def print_function(self, name, function, *, print=print):
+        # Add #[inline] attribute for better optimization hints
+        print("#[inline]")
+        # Call parent implementation
+        super().print_function(name, function, print=print)
+
     def type_name(self, typ):
         assert typ[0] in "iu"
         signed = typ[0]
