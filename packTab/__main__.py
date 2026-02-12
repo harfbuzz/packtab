@@ -75,6 +75,13 @@ def main(args=None):
         help="treat data as sparse: 'index:value' pairs (requires --default)",
     )
     parser.add_argument(
+        "-i",
+        "--input",
+        type=str,
+        metavar="FILE",
+        help="read data from FILE (default: positional args or stdin)",
+    )
+    parser.add_argument(
         "-o",
         "--output",
         type=str,
@@ -84,13 +91,20 @@ def main(args=None):
 
     parsed = parser.parse_args(args)
 
-    # Read data from stdin if not provided on command line
-    if not parsed.data:
+    # Read data from input file, positional args, or stdin
+    if parsed.input:
+        # Read from input file
+        with open(parsed.input, "r") as f:
+            parsed.data = f.read().strip().split()
+        if not parsed.data:
+            parser.error(f"no data in input file: {parsed.input}")
+    elif not parsed.data:
+        # Read from stdin
         import sys
 
         stdin_text = sys.stdin.read().strip()
         if not stdin_text:
-            parser.error("no data provided (either as arguments or via stdin)")
+            parser.error("no data provided (use positional args, -i, or stdin)")
         parsed.data = stdin_text.split()
 
     # Handle sparse data format
