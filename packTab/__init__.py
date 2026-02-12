@@ -89,6 +89,7 @@ import sys
 import collections
 from math import ceil, log2
 from functools import partial
+from typing import Union, List, Dict, Optional, Any, Iterable, Tuple, TextIO
 
 
 __all__ = ["Code", "pack_table", "pick_solution", "languages", "languageClasses"]
@@ -476,15 +477,23 @@ class Code:
     target language.
     """
 
-    def __init__(self, namespace=""):
+    def __init__(self, namespace: str = "") -> None:
         self.namespace = namespace
         self.functions = collections.OrderedDict()
         self.arrays = collections.OrderedDict()
 
-    def nameFor(self, name):
+    def nameFor(self, name: str) -> str:
         return "%s_%s" % (self.namespace, name)
 
-    def addFunction(self, retType, name, args, body, *, private=True):
+    def addFunction(
+        self,
+        retType: str,
+        name: str,
+        args: Tuple[Tuple[str, str], ...],
+        body: str,
+        *,
+        private: bool = True
+    ) -> str:
         name = self.nameFor(name)
         if name in self.functions:
             assert self.functions[name].retType == retType
@@ -495,7 +504,7 @@ class Code:
             self.functions[name] = Function(retType, args, body, private=private)
         return name
 
-    def addArray(self, typ, name, values):
+    def addArray(self, typ: str, name: str, values: List[Any]) -> Tuple[str, int]:
         name = self.nameFor(name)
         array = self.arrays.get(name)
         if array is None:
@@ -503,7 +512,14 @@ class Code:
         start = array.extend(values)
         return name, start
 
-    def print_code(self, *, file=sys.stdout, private=True, indent=0, language="c"):
+    def print_code(
+        self,
+        *,
+        file: TextIO = sys.stdout,
+        private: bool = True,
+        indent: Union[int, str] = 0,
+        language: Union[str, "Language"] = "c"
+    ) -> None:
         if isinstance(indent, int):
             indent *= " "
         printn = partial(print, file=file, sep="")
@@ -1202,24 +1218,33 @@ class OuterLayer(Layer):
 # Public API
 
 
-def pack_table(data, default=0, compression=1, mapping=None):
-    """
+def pack_table(
+    data: Union[List[Union[int, str]], Dict[int, Union[int, str]]],
+    default: Union[int, str] = 0,
+    compression: Optional[float] = 1,
+    mapping: Optional[Dict[Any, Any]] = None,
+) -> Union["OuterSolution", List["OuterSolution"]]:
+    """Pack a static table of integers into compact lookup tables.
 
-    @data is either a dictionary mapping integer keys to values, of an
-    iterable containing values for keys starting at zero.  Values must
-    all be integers, or all strings.
+    Args:
+        data: Either a dictionary mapping integer keys to values, or an
+            iterable containing values for keys starting at zero. Values must
+            all be integers, or all strings.
+        default: Value to be used for keys not specified in data. Defaults
+            to zero.
+        compression: Tunes the size-vs-speed tradeoff. Higher values prefer
+            smaller tables. If None, returns all Pareto-optimal solutions.
+            Defaults to 1.
+        mapping: Optional bidirectional mapping from integer keys to string
+            values or vice versa. Used to convert non-integer values to integers.
 
-    @mapping, if set, should be either a mapping from integer keys to
-    string values, or vice versa.  Either way, it's first augmented by its
-    own inverse.  After that it's used to map any value in @data that is
-    not an integer.  If @mapping is not provided and data values are
-    strings, the strings are written out verbatim.
+    Returns:
+        If compression is set: the best OuterSolution.
+        If compression is None: list of all Pareto-optimal OuterSolutions.
 
-    If mapping is not provided and values are strings, it is assumed that they
-    all fit in an unsigned char.
-
-    @default is value to be used for keys not specified in @data.  Defaults
-    to zero.
+    Raises:
+        ValueError: If data is empty or dict keys are negative.
+        TypeError: If dict keys are not integers or values are mixed types.
     """
 
     if not data:
@@ -1269,12 +1294,16 @@ def pack_table(data, default=0, compression=1, mapping=None):
     return pick_solution(solutions, compression)
 
 
-def pick_solution(solutions, compression=1):
+def pick_solution(solutions: List["OuterSolution"], compression: float = 1) -> "OuterSolution":
     """Select the best solution from the Pareto frontier.
 
-    The ``compression`` parameter controls the tradeoff:
-      - Higher values prefer smaller tables (more compression).
-      - Lower values prefer fewer lookups (faster access).
+    Args:
+        solutions: List of OuterSolution objects (Pareto frontier).
+        compression: Controls size-vs-speed tradeoff. Higher values prefer
+            smaller tables. Defaults to 1.
+
+    Returns:
+        The OuterSolution with the best score.
 
     The scoring function ``nLookups + compression * log2(fullCost)``
     balances lookup count against log-scaled storage cost.
