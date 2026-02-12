@@ -921,26 +921,20 @@ class InnerLayer(Layer):
         """Remove dominated solutions (Pareto pruning).
 
         A solution B is dominated by A if A has <= lookups AND
-        <= fullCost.  Only non-dominated solutions survive."""
+        <= fullCost.  Only non-dominated solutions survive.
 
-        # Doing it the slowest, O(N^2), way for now.
-        sols = self.solutions
-        for a in sols:
-            if a.cost == None:
-                continue
-            for b in sols:
-                if a is b:
-                    continue
-                if b.cost == None:
-                    continue
+        O(N log N): sort by (nLookups, fullCost) ascending, then scan
+        once keeping only solutions whose fullCost is strictly less
+        than all previous (which have <= nLookups)."""
 
-                # Rules of dominance: a being not worse than b
-                if a.nLookups <= b.nLookups and a.fullCost <= b.fullCost:
-                    b.cost = None
-                    continue
-
-        self.solutions = [s for s in self.solutions if s.cost is not None]
-        self.solutions.sort(key=lambda s: s.nLookups)
+        self.solutions.sort(key=lambda s: (s.nLookups, s.fullCost))
+        kept = []
+        best_cost = float("inf")
+        for s in self.solutions:
+            if s.fullCost < best_cost:
+                kept.append(s)
+                best_cost = s.fullCost
+        self.solutions = kept
 
 
 class OuterSolution(Solution):
