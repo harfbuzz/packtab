@@ -22,6 +22,15 @@ python -m packTab --rust 1 2 3 4
 
 # Generate Rust with unsafe array access
 python -m packTab --rust --unsafe 1 2 3 4
+
+# Analyze compression without generating code
+python -m packTab --analyze 1 2 3 4
+
+# Read data from stdin
+seq 0 255 | python -m packTab --rust
+
+# Tune compression (higher = smaller, slower)
+echo "1 2 3 4" | python -m packTab --compression 5
 ```
 
 ### As a library
@@ -55,6 +64,72 @@ lang = languageClasses["rust"](unsafe_array_access=True)
 code = Code("mytable")
 solution.genCode(code, "lookup", language=lang, private=False)
 code.print_code(language=lang)
+```
+
+## Examples
+
+### Simple linear data
+
+For data that's already sequential, the identity optimization kicks in:
+
+```bash
+$ python -m packTab --analyze $(seq 0 255)
+Original data: 256 values, range [0..255]
+Original storage: 8 bits/value, 256 bytes total
+
+Found 1 Pareto-optimal solutions:
+  0 lookups, 5 extra ops, 0 bytes
+  Compression ratio: ∞ (computed inline, no storage)
+```
+
+Generated code just returns the input: `return u < 256 ? u : 0`
+
+### Sparse data
+
+For sparse lookup tables with many repeated values:
+
+```python
+from packTab import pack_table, Code
+
+# Sparse Unicode-like table: mostly 0, some special values
+data = [0] * 100
+data[10] = 5
+data[20] = 10
+data[50] = 15
+data[80] = 20
+
+solution = pack_table(data, default=0)
+code = Code("sparse")
+solution.genCode(code, "lookup", language="c")
+code.print_code(language="c")
+```
+
+The packer will use multi-level tables and sub-byte packing to minimize storage.
+
+### Generated code structure
+
+For small datasets, values are inlined as bit-packed constants:
+
+```c
+// Input: [1, 2, 3, 4]
+extern inline uint8_t data_get (unsigned u)
+{
+  return u<4 ? (uint8_t)(u)+(uint8_t)(((15u>>(u))&1)) : 0;
+}
+// Uses identity optimization: data[i] = i + 1, stored as 0b1111
+```
+
+For larger datasets, generates lookup tables:
+
+```rust
+// Input: 256 values with pattern
+static data_u8: [u8; 256] = [ ... ];
+
+#[inline]
+pub(crate) fn data_get (u: usize) -> u8
+{
+  if u<256 { data_u8[u] as u8 } else { 0 }
+}
 ```
 
 ## How it works
