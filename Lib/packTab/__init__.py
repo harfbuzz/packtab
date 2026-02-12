@@ -147,6 +147,9 @@ def binaryBitsFor(minV, maxV):
 
 
 class Language:
+    def __init__(self, *, unsafe_array_access=False):
+        self.unsafe_array_access = unsafe_array_access
+
     def print_array(self, name, array, *, print=print, private=True):
         linkage = self.private_array_linkage if private else self.public_array_linkage
         decl = self.declare_array(linkage, array.typ, name, len(array.values))
@@ -172,8 +175,6 @@ class Language:
         print(self.function_start)
         print("  %s" % self.return_stmt(function.body))
         print(self.function_end)
-
-    unsafe_array_access = False
 
     def array_index(self, name, index):
         return "%s[%s]" % (name, index)
@@ -366,8 +367,8 @@ class LanguageRust(Language):
         return expr
 
 languages = {
-    "c": LanguageC(),
-    "rust": LanguageRust(),
+    "c": LanguageC,
+    "rust": LanguageRust,
 }
 
 
@@ -425,7 +426,7 @@ class Code:
         println = partial(printn, indent)
 
         if isinstance(language, str):
-            language = languages[language]
+            language = languages[language]()
 
         language.print_preamble(print=println)
 
@@ -530,7 +531,7 @@ class InnerSolution(Solution):
         expr = var
 
         if isinstance(language, str):
-            language = languages[language]
+            language = languages[language]()
 
         typ = language.type_for(self.layer.minV, self.layer.maxV)
         retType = fastType(typ)
@@ -738,7 +739,7 @@ class OuterSolution(Solution):
         expr = var
 
         if isinstance(language, str):
-            language = languages[language]
+            language = languages[language]()
 
         typ = language.type_for(self.layer.minV, self.layer.maxV)
         retType = fastType(typ)
