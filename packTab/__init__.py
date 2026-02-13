@@ -980,9 +980,17 @@ class InnerLayer(Layer):
         Pairs are assigned IDs based on frequency (most common pairs
         get lower IDs) for better cache locality. Position is used as
         a tiebreaker for pairs with equal frequency.
+
+        When padding is needed, the padded element is never accessed
+        (guaranteed unreachable), so we choose a padding value that
+        creates the most common pair, maximizing compression.
         """
         if len(self.data) & 1:
-            self.data.append(0)
+            # Smart padding: choose value that creates most common pair.
+            # The padded position is never accessed, so this is safe.
+            last_val = self.data[-1]
+            padding = self._choose_optimal_padding(last_val)
+            self.data.append(padding)
 
         # Collect pairs with frequencies and first occurrence positions
         from collections import Counter
@@ -1007,6 +1015,32 @@ class InnerLayer(Layer):
         data2 = _combine2(self.data, lambda a, b: mapping[(a, b)])
 
         self.next = InnerLayer(data2)
+
+    def _choose_optimal_padding(self, last_val):
+        """Choose padding value that maximizes compression.
+
+        Returns a value V such that the pair (last_val, V) is the most
+        common existing pair starting with last_val. If no such pair
+        exists, returns the most frequent value overall.
+        """
+        from collections import Counter
+
+        # Count existing pairs to find common patterns
+        pairs = [(self.data[i], self.data[i + 1])
+                 for i in range(0, len(self.data) - 1, 2)]
+        pair_freq = Counter(pairs)
+
+        # Find which value V makes (last_val, V) most frequent
+        candidates = {b: freq for (a, b), freq in pair_freq.items() if a == last_val}
+
+        if candidates:
+            # Return V that makes (last_val, V) most common
+            return max(candidates, key=candidates.get)
+
+        # No pairs with last_val - use most frequent value overall
+        # to maximize future duplicate detection opportunities
+        value_freq = Counter(self.data)
+        return value_freq.most_common(1)[0][0]
 
     def prune_solutions(self):
         """Remove dominated solutions (Pareto pruning).
