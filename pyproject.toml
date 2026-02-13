@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "packtab"
-version = "1.1.0"
+version = "1.2.0"
 description = "Unicode (and other integer) table packer"
 readme = "README.md"
 requires-python = ">=3.8"
