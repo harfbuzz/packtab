@@ -465,7 +465,44 @@ class Array:
         self.values = []
 
     def extend(self, values):
+        """Append values to array, with overlap optimization.
+
+        If the last element of the existing array equals the first element
+        of the new values, we find the maximum overlap where all overlapping
+        elements have that same value, reducing total array size.
+        """
+        if not values:
+            return len(self.values)
+
         start = len(self.values)
+
+        # Overlap optimization: if last element of existing array equals
+        # first element of new values, find maximum overlap of that value
+        if self.values and self.values[-1] == values[0]:
+            overlap_value = self.values[-1]
+
+            # Count trailing run of overlap_value in existing array
+            trailing_count = 0
+            for i in range(len(self.values) - 1, -1, -1):
+                if self.values[i] == overlap_value:
+                    trailing_count += 1
+                else:
+                    break
+
+            # Count leading run of overlap_value in new values
+            leading_count = 0
+            for val in values:
+                if val == overlap_value:
+                    leading_count += 1
+                else:
+                    break
+
+            # Overlap by the minimum of the two runs
+            overlap = min(trailing_count, leading_count)
+            if overlap > 0:
+                start -= overlap
+                values = values[overlap:]
+
         self.values.extend(values)
         return start
 
