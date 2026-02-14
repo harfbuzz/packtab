@@ -64,8 +64,7 @@ module = "packTab.ucdxml"
 ignore_errors = true
 
 [tool.pytest.ini_options]
-testpaths = ["packTab"]
-python_files = ["test.py"]
+testpaths = ["tests"]
 addopts = [
     "--strict-markers",
     "--strict-config",
@@ -74,7 +73,7 @@ addopts = [
 [tool.coverage.run]
 source = ["packTab"]
 omit = [
-    "*/test.py",
+    "tests/*",
     "*/__main__.py",
 ]
 
