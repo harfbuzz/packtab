@@ -1194,7 +1194,9 @@ class PaletteOuterSolution(Solution):
         (_, index_expr) = self.next.genCode(code, None, var, language=language)
 
         # Look up value in palette: palette[index]
-        expr = language.array_index(palette_name, index_expr)
+        # Cast index to usize for Rust array indexing
+        index_expr_usize = language.as_usize(index_expr)
+        expr = language.array_index(palette_name, index_expr_usize)
         expr = language.cast(retType, expr)
 
         # Apply OuterLayer's inverse arithmetic operations

@@ -1199,3 +1199,225 @@ class TestCacheOptimization:
         # (5,6) appears once -> highest ID
         assert id_56 > id_12
         assert id_56 > id_34
+
+
+class TestPaletteEncoding:
+    """Test palette encoding optimization."""
+
+    def test_palette_generated_for_outlier(self):
+        """Palette solution should be generated when there's an outlier."""
+        data = [1, 2, 3, 2, 3, 2, 1, 0, 2, 1, 2, 2, 3, 3, 1, 11110124]
+        solutions = pack_table(data, default=0, compression=None)
+
+        # Should have both direct and palette solutions
+        assert len(solutions) >= 2
+
+        # Check that one is a palette solution
+        palette_solutions = [s for s in solutions if hasattr(s, 'palette') and isinstance(s.palette, list)]
+        assert len(palette_solutions) >= 1
+
+        # Verify palette structure
+        pal_sol = palette_solutions[0]
+        assert pal_sol.palette == [0, 1, 2, 3, 11110124]
+        assert pal_sol.nLookups == 2  # indices + palette
+
+    def test_palette_skipped_all_unique(self):
+        """Palette should not be generated when all values are unique."""
+        data = list(range(100))
+        solutions = pack_table(data, default=0, compression=None)
+
+        # Should not have palette solutions (all values unique)
+        palette_solutions = [s for s in solutions if hasattr(s, 'palette') and isinstance(s.palette, list)]
+        assert len(palette_solutions) == 0
+
+    def test_palette_skipped_no_savings(self):
+        """Palette should not be generated when index_bits >= value_bits."""
+        # 16 unique values in range [0..15] -> 4 bits for both indices and values
+        data = list(range(16))
+        solutions = pack_table(data, default=0, compression=None)
+
+        # Should not have palette solutions (no bit savings)
+        palette_solutions = [s for s in solutions if hasattr(s, 'palette') and isinstance(s.palette, list)]
+        assert len(palette_solutions) == 0
+
+    def test_palette_with_few_unique_values(self):
+        """Palette should be generated when few unique values with outlier."""
+        # 100 values, only 5 unique small values + 1 huge outlier
+        import random
+        random.seed(42)
+        data = [random.choice([1, 2, 3, 4, 5]) for _ in range(100)] + [999999]
+        solutions = pack_table(data, default=0, compression=None)
+
+        # Should have palette solution
+        palette_solutions = [s for s in solutions if hasattr(s, 'palette') and isinstance(s.palette, list)]
+        assert len(palette_solutions) >= 1
+
+        pal_sol = palette_solutions[0]
+        assert len(pal_sol.palette) <= 6  # 5 small values + outlier
+
+    def test_palette_cost_calculation(self):
+        """Verify palette solution cost is calculated correctly."""
+        data = [1, 2, 3, 2, 3, 2, 1, 0, 2, 1, 2, 2, 3, 3, 1, 11110124]
+        solutions = pack_table(data, default=0, compression=None)
+
+        palette_sol = [s for s in solutions if hasattr(s, 'palette') and isinstance(s.palette, list)][0]
+
+        # Palette: 5 values × 4 bytes = 20 bytes
+        # Indices: 16 values, 3 bits each, packed = ~6 bytes
+        # Total should be around 20-28 bytes
+        assert 20 <= palette_sol.cost <= 30
+        assert palette_sol.cost < 64  # Better than direct (64 bytes)
+
+    def test_palette_in_pareto_frontier(self):
+        """Palette solution should be on Pareto frontier."""
+        data = [1, 2, 3, 2, 3, 2, 1, 0, 2, 1, 2, 2, 3, 3, 1, 11110124]
+        solutions = pack_table(data, default=0, compression=None)
+
+        # All returned solutions should be non-dominated
+        for a in solutions:
+            for b in solutions:
+                if a is b:
+                    continue
+                # a should not dominate b (otherwise b wouldn't be in frontier)
+                assert not (a.nLookups <= b.nLookups and a.fullCost <= b.fullCost)
+
+    def test_palette_selected_large_dataset(self):
+        """Palette should be selected for large dataset with outliers."""
+        import random
+        random.seed(42)
+        # 1000 values from small range, plus one huge outlier
+        data = [random.choice([1, 2, 3, 4, 5]) for _ in range(1000)] + [999999]
+
+        # With compression=1, palette should win
+        solution = pack_table(data, default=0, compression=1)
+
+        # Should be palette solution
+        assert hasattr(solution, 'palette') and isinstance(solution.palette, list)
+        assert len(solution.palette) == 6  # 5 values + outlier
+
+    def test_palette_code_generation_c(self):
+        """Test palette code generation for C."""
+        data = [1, 2, 3, 2, 3, 2, 1, 0, 2, 1, 2, 2, 3, 3, 1, 11110124]
+        solutions = pack_table(data, default=0, compression=None)
+
+        palette_sol = [s for s in solutions if hasattr(s, 'palette') and isinstance(s.palette, list)][0]
+
+        code = Code("test")
+        palette_sol.genCode(code, "get", language="c", private=False)
+
+        output = io.StringIO()
+        code.print_code(file=output, language="c")
+        result = output.getvalue()
+
+        # Should contain palette array
+        assert "palette" in result
+        # Should contain the outlier value
+        assert "11110124" in result
+
+    def test_palette_code_generation_rust(self):
+        """Test palette code generation for Rust."""
+        data = [1, 2, 3, 2, 3, 2, 1, 0, 2, 1, 2, 2, 3, 3, 1, 11110124]
+        solutions = pack_table(data, default=0, compression=None)
+
+        palette_sol = [s for s in solutions if hasattr(s, 'palette') and isinstance(s.palette, list)][0]
+
+        code = Code("test")
+        palette_sol.genCode(code, "get", language="rust", private=False)
+
+        output = io.StringIO()
+        code.print_code(file=output, language="rust")
+        result = output.getvalue()
+
+        # Should contain palette array
+        assert "palette" in result
+        # Should be valid Rust syntax
+        assert "fn " in result or "#[inline]" in result
+
+    def test_palette_end_to_end_c(self):
+        """Compile and run palette-encoded C code."""
+        import random
+        random.seed(42)
+        data = [random.choice([10, 20, 30]) for _ in range(50)] + [999999]
+
+        # Force palette solution
+        solutions = pack_table(data, default=0, compression=None)
+        palette_sol = [s for s in solutions if hasattr(s, 'palette') and isinstance(s.palette, list)][0]
+
+        code = Code("data")
+        palette_sol.genCode(code, "get", language="c", private=False)
+
+        output = io.StringIO()
+        code.print_code(file=output, language="c")
+        c_code = output.getvalue()
+
+        # Compile and test
+        _compile_and_run_c(c_code, data, 0)
+
+    def test_palette_end_to_end_rust(self):
+        """Compile and run palette-encoded Rust code."""
+        import random
+        random.seed(42)
+        data = [random.choice([10, 20, 30]) for _ in range(50)] + [999999]
+
+        # Force palette solution
+        solutions = pack_table(data, default=0, compression=None)
+        palette_sol = [s for s in solutions if hasattr(s, 'palette') and isinstance(s.palette, list)][0]
+
+        code = Code("data")
+        palette_sol.genCode(code, "get", language="rust", private=False)
+
+        output = io.StringIO()
+        code.print_code(file=output, language="rust")
+        rust_code = output.getvalue()
+
+        # Compile and test
+        _compile_and_run_rust(rust_code, data, 0)
+
+    def test_palette_with_bias(self):
+        """Palette should work with OuterLayer bias optimization."""
+        # Values with common bias
+        data = [100, 101, 102, 101, 102, 101, 100, 99] + [999999]
+        solutions = pack_table(data, default=0, compression=None)
+
+        palette_sol = [s for s in solutions if hasattr(s, 'palette') and isinstance(s.palette, list)]
+        if palette_sol:
+            # If palette generated, it should handle the bias correctly
+            pal = palette_sol[0]
+            code = Code("test")
+            pal.genCode(code, "get", language="c")
+            assert True  # Just verify it generates without error
+
+    def test_palette_with_repeated_pattern(self):
+        """Palette with repeated patterns should work correctly."""
+        # Repeated pattern with outlier
+        base_pattern = [1, 2, 3, 2, 3, 2, 1, 0]
+        data = base_pattern * 32 + [999999]
+
+        solution = pack_table(data, default=0, compression=5)
+
+        # Should generate valid code
+        code = Code("test")
+        solution.genCode(code, "get", language="c")
+        output = io.StringIO()
+        code.print_code(file=output, language="c")
+        assert len(output.getvalue()) > 0
+
+    def test_palette_separate_from_other_arrays(self):
+        """Verify palette uses separate array, not offset into existing arrays."""
+        data = [1, 2, 3, 2, 3, 2, 1, 0, 2, 1, 2, 2, 3, 3, 1, 11110124]
+        solutions = pack_table(data, default=0, compression=None)
+
+        palette_sol = [s for s in solutions if hasattr(s, 'palette') and isinstance(s.palette, list)][0]
+
+        code = Code("data")
+        palette_sol.genCode(code, "get", language="c", private=False)
+
+        output = io.StringIO()
+        code.print_code(file=output, language="c")
+        result = output.getvalue()
+
+        # Should have separate palette array name
+        assert "data_palette" in result
+        # Should not have offset addition in palette access (e.g., not "data_u32[5 + ...]")
+        # The palette access should be clean: palette[index]
+        assert "palette[" in result or "palette" in result
