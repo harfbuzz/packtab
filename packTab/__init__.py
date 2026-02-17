@@ -1104,6 +1104,7 @@ class OuterSolution(Solution):
 
     def __init__(self, layer, next, nLookups, nExtraOps, cost):
         Solution.__init__(self, layer, next, nLookups, nExtraOps, cost)
+        self.palette = False
 
     def genCode(self, code, name=None, var="u", language="c", private=True):
         inputVar = var
@@ -1144,6 +1145,78 @@ class OuterSolution(Solution):
             elif self.layer.bias < 0:
                 expr = "%s-%d" % (expr, -self.layer.bias)
 
+        expr = language.tertiary(
+            "%s<%s" % (var, len(self.layer.data)), expr, self.layer.default
+        )
+
+        if name:
+            funcName = code.addFunction(
+                retType, name, ((language.usize, "u"),), expr, private=private
+            )
+            expr = "%s(%s)" % (funcName, inputVar)
+
+        return (retType, expr)
+
+
+class PaletteOuterSolution(Solution):
+    """Solution using palette encoding: indices -> palette of unique values.
+
+    Like indexed color in graphics, stores an index array plus a palette
+    table of unique values. The indices array is passed through InnerLayer
+    and can still be split for further compression. This helps when there
+    are few unique values (especially with outliers that would otherwise
+    force wide storage for the entire array).
+    """
+
+    def __init__(self, layer, next, nLookups, nExtraOps, cost, palette, value_to_index):
+        Solution.__init__(self, layer, next, nLookups, nExtraOps, cost)
+        self.palette = palette  # List of unique values
+        self.value_to_index = value_to_index  # Dict mapping value -> palette index
+
+    def genCode(self, code, name=None, var="u", language="c", private=True):
+        inputVar = var
+        if name:
+            var = "u"
+
+        if isinstance(language, str):
+            language = languages[language]
+
+        # Determine return type based on original value range
+        typ = language.type_for(self.layer.minV, self.layer.maxV)
+        retType = fastType(typ)
+
+        # Generate palette array containing unique values
+        palette_typ = language.type_for(min(self.palette), max(self.palette))
+        palette_name, _ = code.addArray(palette_typ, "palette", self.palette)
+
+        # Get index lookup expression from InnerLayer (self.next)
+        # This returns an expression that evaluates to a palette index
+        (_, index_expr) = self.next.genCode(code, None, var, language=language)
+
+        # Look up value in palette: palette[index]
+        expr = language.array_index(palette_name, index_expr)
+        expr = language.cast(retType, expr)
+
+        # Apply OuterLayer's inverse arithmetic operations
+        if self.layer.mult != 1:
+            expr = "%d*%s" % (self.layer.mult, expr)
+        if self.layer.identity:
+            expr = language.wrapping_add(language.cast(retType, var), expr)
+            if self.layer.bias > 0:
+                expr = language.wrapping_add(
+                    language.uint_literal(self.layer.bias, retType), expr
+                )
+            elif self.layer.bias < 0:
+                expr = language.wrapping_sub(
+                    expr, language.uint_literal(-self.layer.bias, retType)
+                )
+        else:
+            if self.layer.bias > 0:
+                expr = "%d+%s" % (self.layer.bias, expr)
+            elif self.layer.bias < 0:
+                expr = "%s-%d" % (expr, -self.layer.bias)
+
+        # Bounds check
         expr = language.tertiary(
             "%s<%s" % (var, len(self.layer.data)), expr, self.layer.default
         )
@@ -1349,6 +1422,55 @@ class OuterLayer(Layer):
             cost = s.cost + extraCost
             solution = OuterSolution(self, s, nLookups, nExtraOps, cost)
             self.solutions.append(solution)
+
+        # Try palette encoding: indices -> unique values table
+        # Only for integer data (strings already use mapping)
+        if isinstance(self.minV, int) and isinstance(self.maxV, int):
+            palette_solutions = self._try_palette_encoding(data, extraCost)
+            self.solutions.extend(palette_solutions)
+
+    def _try_palette_encoding(self, data, extraCost):
+        """Try palette encoding: store indices + unique values table.
+
+        Returns list of PaletteOuterSolution instances if beneficial,
+        otherwise returns empty list.
+        """
+        # Extract unique values and build palette
+        palette = sorted(set(data))
+
+        # Check if index bits are smaller than value bits
+        index_bits = binaryBitsFor(0, len(palette) - 1)
+        value_bits = binaryBitsFor(min(palette), max(palette))
+
+        # Only generate palette solution if it saves encoding bits
+        # The Pareto frontier will decide if it's worth the extra lookup
+        if index_bits >= value_bits:
+            return []
+
+        # Build index mapping and indices array
+        value_to_index = {v: i for i, v in enumerate(palette)}
+        indices = [value_to_index[v] for v in data]
+
+        # Create InnerLayer for indices (can be split further!)
+        indices_layer = InnerLayer(indices)
+
+        # Calculate palette storage cost
+        palette_bits = binaryBitsFor(min(palette), max(palette))
+        palette_cost = ceil(palette_bits * len(palette) / 8)
+
+        # Wrap each indices solution as a PaletteOuterSolution
+        solutions = []
+        for s in indices_layer.solutions:
+            nLookups = s.nLookups + 1  # +1 for palette lookup
+            nExtraOps = s.nExtraOps + self.extraOps
+            cost = s.cost + palette_cost + extraCost
+
+            solution = PaletteOuterSolution(
+                self, s, nLookups, nExtraOps, cost, palette, value_to_index
+            )
+            solutions.append(solution)
+
+        return solutions
 
 
 # Public API
