@@ -1147,6 +1147,80 @@ class TestEdgeCases:
             pack_table([1, 2, 3], default=0, mapping={})
 
 
+class TestInnerLayerDeepChain:
+    """Test that deep chains (5 layers) are built and pruned correctly.
+
+    The binary-split engine recursively pairs adjacent values until all IDs
+    are identical (maxV == 0).  For data such as range(16)*1000, this produces
+    5 inner layers.  The 1-lookup wrap-constant solution (8 bytes) dominates
+    all multi-lookup alternatives, so exactly one solution survives Pareto
+    pruning.
+    """
+
+    # (0..16) repeated 1000× → 16 000 elements, 5 inner layers.
+    DEEP_DATA = list(range(16)) * 1000
+
+    def test_deep_chain_builds_five_layers(self):
+        """Chain for (0..16)*1000 must build exactly 5 layers, deepest constant."""
+        layer = InnerLayer(self.DEEP_DATA)
+        # Walk the next-chain to count layers.
+        n = 0
+        l = layer
+        while l is not None:
+            n += 1
+            l = l.next if hasattr(l, "next") else None
+        assert n == 5, f"Expected 5-layer chain for (0..16) repeating data, got {n}"
+        # The deepest layer must be the all-zero constant.
+        l = layer
+        while l.next is not None:
+            l = l.next
+        assert l.maxV == 0, f"Deepest layer must be constant, got maxV={l.maxV}"
+
+    def test_deep_chain_pareto_optimal(self):
+        """All solutions for a deep chain must be Pareto-optimal (non-dominated)."""
+        layer = InnerLayer(self.DEEP_DATA)
+        solutions = layer.solutions
+        for a in solutions:
+            for b in solutions:
+                if a is b:
+                    continue
+                assert not (a.nLookups <= b.nLookups and a.fullCost <= b.fullCost), (
+                    f"Solution (nl={a.nLookups}, fc={a.fullCost}) dominates "
+                    f"(nl={b.nLookups}, fc={b.fullCost})"
+                )
+
+    def test_deep_chain_lookups_sorted(self):
+        """Solutions must be ordered by nLookups ascending."""
+        layer = InnerLayer(self.DEEP_DATA)
+        lookups = [s.nLookups for s in layer.solutions]
+        assert lookups == sorted(lookups), (
+            f"Solutions not sorted by nLookups: {lookups}"
+        )
+
+    def test_deep_chain_cost_strictly_decreases(self):
+        """When ordered by nLookups, fullCost must strictly decrease."""
+        layer = InnerLayer(self.DEEP_DATA)
+        prev_cost = float("inf")
+        for s in layer.solutions:
+            assert s.fullCost < prev_cost, (
+                f"fullCost did not strictly decrease: {s.fullCost} >= {prev_cost}"
+            )
+            prev_cost = s.fullCost
+
+    def test_deep_chain_pick_solution_valid(self):
+        """pick_solution must return a valid, compact solution for the 5-layer chain."""
+        data = list(range(16)) * 1000
+        solutions = pack_table(data, default=0, compression=None)
+        assert solutions, "Must have at least one solution"
+        best = pick_solution(solutions, 9.0)
+        assert best is not None, "pick_solution must return a solution"
+        # The chosen solution should be far smaller than naive flat storage
+        # (16000 values × 4 bits = 8000 bytes).
+        assert best.cost < 100, (
+            f"High-compression should pick a compact solution, got {best.cost} bytes"
+        )
+
+
 class TestCacheOptimization:
     """Test frequency-based chunk sorting for cache locality."""
 
