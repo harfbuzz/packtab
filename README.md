@@ -180,6 +180,8 @@ specialist `kEH_*`, `kTGT_*`, and `kNSHU_*` property families. Use
 Pass `--c-out path/to/ucd_runtime.c` to also emit a single C source file with
 one accessor per selected property.
 Deprecated UCD properties such as `FC_NFKC`, `Gr_Link`, and `XO_*` are omitted.
+Pass `--pooled-c-out path/to/ucd_pooled.c` to prototype a shared-string C
+backend for the string-heavy runtime properties.
 
 ## History
 
