@@ -167,15 +167,6 @@ def name_alias_values(ucd_zip: Path) -> list[str]:
     return values
 
 
-def iso_comment_values(ucd_zip: Path) -> list[str]:
-    values = [""] * CODEPOINT_COUNT
-    with zipfile.ZipFile(ucd_zip) as zf:
-        for line in zf.read("UnicodeData.txt").decode("utf-8").splitlines():
-            fields = line.split(";")
-            values[int(fields[0], 16)] = fields[11]
-    return values
-
-
 SUPPLEMENT_LOADERS: dict[str, tuple[str, Callable[[Path], list[str]]]] = {
     "FC_NFKC": (
         "DerivedNormalizationProps.txt",
@@ -218,7 +209,6 @@ SUPPLEMENT_LOADERS: dict[str, tuple[str, Callable[[Path], list[str]]]] = {
             ucd_zip, "DerivedNormalizationProps.txt", "Expands_On_NFKD"
         ),
     ),
-    "isc": ("UnicodeData.txt", iso_comment_values),
 }
 
 IGNORED_UNIHAN_PROPERTIES = {
@@ -293,6 +283,12 @@ def sanitize_symbol(prop: str) -> str:
     return "".join(ch if ch.isalnum() else "_" for ch in prop)
 
 
+def is_fully_inlined(solution, symbol: str) -> bool:
+    code = Code("probe")
+    solution.genCode(code, f"{sanitize_symbol(symbol)}_get", language="c", private=False)
+    return not code.arrays
+
+
 def analyze_property(
     prop: str,
     values: list,
@@ -318,6 +314,7 @@ def analyze_property(
         "bytes": solution.cost,
         "full_cost": solution.fullCost,
         "transform": transform[0] if transform else "",
+        "fully_inlined": is_fully_inlined(solution, prop),
     }
     generated = {
         "property": prop,
@@ -431,12 +428,14 @@ def main() -> int:
 
     total_bytes = sum(item["bytes"] for item in results)
     total_full_cost = sum(item["full_cost"] for item in results)
+    inlined = [item["property"] for item in results if item["fully_inlined"]]
     summary = {
         "unicode_version": UNICODE_VERSION,
         "compression": args.compression,
         "profile": args.profile,
         "excluded_properties": sorted(excluded),
         "property_count": len(results),
+        "fully_inlined_properties": inlined,
         "total_bytes": total_bytes,
         "total_full_cost": total_full_cost,
         "properties": results,
@@ -445,6 +444,7 @@ def main() -> int:
     print()
     print(f"Unicode {UNICODE_VERSION} non-Unihan prototype ({args.profile})")
     print(f"Properties analyzed: {len(results)}")
+    print(f"Fully inlined properties: {len(inlined)}")
     print(f"Total packed bytes: {total_bytes}")
     print(f"Total full cost: {total_full_cost}")
 
