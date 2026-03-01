@@ -32,6 +32,7 @@ XML_URL = f"https://www.unicode.org/Public/{UNICODE_VERSION}/ucdxml/{XML_NAME}"
 UCD_URL = f"https://www.unicode.org/Public/{UNICODE_VERSION}/ucd/{UCD_NAME}"
 
 DEFAULT_RUNTIME_EXCLUDES = {
+    "EqUIdeo",
     "JSN",
     "Name_Alias",
     "NFKC_CF",
