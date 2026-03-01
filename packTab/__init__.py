@@ -972,6 +972,22 @@ def _aligned_base_for_live_range(data, default):
     return first & ~mask
 
 
+def _first_non_default_index(data, default):
+    return next((i for i, v in enumerate(data) if v != default), None)
+
+
+def _prune_pareto_solutions(solutions):
+    """Remove solutions dominated on (nLookups, fullCost)."""
+    solutions = sorted(solutions, key=lambda s: (s.nLookups, s.fullCost))
+    kept = []
+    best_cost = float("inf")
+    for s in solutions:
+        if s.fullCost < best_cost:
+            kept.append(s)
+            best_cost = s.fullCost
+    return kept
+
+
 class InnerLayer(Layer):
     """Recursive binary-split engine producing multi-level lookup solutions.
 
@@ -1110,14 +1126,7 @@ class InnerLayer(Layer):
         once keeping only solutions whose fullCost is strictly less
         than all previous (which have <= nLookups)."""
 
-        self.solutions.sort(key=lambda s: (s.nLookups, s.fullCost))
-        kept = []
-        best_cost = float("inf")
-        for s in self.solutions:
-            if s.fullCost < best_cost:
-                kept.append(s)
-                best_cost = s.fullCost
-        self.solutions = kept
+        self.solutions = _prune_pareto_solutions(self.solutions)
 
 
 class OuterSolution(Solution):
@@ -1557,7 +1566,25 @@ def pack_table(
     if not isinstance(default, int) and mapping is not None:
         default = mapping[default]
 
-    solutions = OuterLayer(data, default).solutions
+    aligned_layer = OuterLayer(data, default)
+    solutions = list(aligned_layer.solutions)
+
+    first_non_default = _first_non_default_index(data, default)
+    if (
+        first_non_default is not None
+        and first_non_default != aligned_layer.base
+    ):
+        exact_layer = OuterLayer(data, default, base=first_non_default)
+        inline_exact = any(
+            not isinstance(s, PaletteOuterSolution)
+            and getattr(getattr(s, "next", None), "bits", None) == 0
+            and s.next.layer.bytes <= 8
+            and isinstance(s.next.layer.minV, int)
+            and s.next.layer.minV >= 0
+            for s in exact_layer.solutions
+        )
+        if inline_exact:
+            solutions = _prune_pareto_solutions(solutions + exact_layer.solutions)
 
     if compression is None:
         solutions.sort(key=lambda s: -s.fullCost)

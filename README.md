@@ -111,6 +111,8 @@ code.print_code(language="c")
 The packer will use multi-level tables and sub-byte packing to minimize storage.
 If all live values sit inside a power-of-two-aligned suffix, it also rebases the
 stored span to skip the all-default prefix.
+When the exact live span is small enough to inline as a constant, it also tries
+an exact rebase to the first non-default index.
 
 ### Generated code structure
 

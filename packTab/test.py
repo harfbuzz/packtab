@@ -549,6 +549,16 @@ class TestPackTable:
         solution = pack_table([0, 1000, 2000, 3000], default=0)
         assert isinstance(solution, (InnerSolution, OuterSolution))
 
+    def test_exact_leading_cull_used_when_trimmed_span_inlines(self):
+        data = [0] * 17 + [1, 2, 3, 4]
+        solution = pack_table(data, default=0, compression=10)
+        assert solution.layer.base == 17
+
+    def test_exact_leading_cull_skipped_when_trimmed_span_would_not_inline(self):
+        data = [0] * 17 + list(range(32))
+        solutions = pack_table(data, default=0, compression=None)
+        assert all(s.layer.base != 17 for s in solutions)
+
     def test_empty_list_raises(self):
         with pytest.raises(ValueError):
             pack_table([], default=0)
