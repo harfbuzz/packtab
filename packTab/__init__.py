@@ -1126,24 +1126,10 @@ class OuterSolution(Solution):
 
         if self.layer.mult != 1:
             expr = "%d*%s" % (self.layer.mult, expr)
-        if self.layer.identity:
-            # Identity subtraction (data[i] = i + delta): intermediate
-            # arithmetic can wrap the unsigned return type (e.g. 255u8 + 2u8).
-            # C unsigned wraps naturally; Rust needs explicit wrapping_add/sub.
-            expr = language.wrapping_add(language.cast(retType, var), expr)
-            if self.layer.bias > 0:
-                expr = language.wrapping_add(
-                    language.uint_literal(self.layer.bias, retType), expr
-                )
-            elif self.layer.bias < 0:
-                expr = language.wrapping_sub(
-                    expr, language.uint_literal(-self.layer.bias, retType)
-                )
-        else:
-            if self.layer.bias > 0:
-                expr = "%d+%s" % (self.layer.bias, expr)
-            elif self.layer.bias < 0:
-                expr = "%s-%d" % (expr, -self.layer.bias)
+        if self.layer.bias > 0:
+            expr = "%d+%s" % (self.layer.bias, expr)
+        elif self.layer.bias < 0:
+            expr = "%s-%d" % (expr, -self.layer.bias)
 
         expr = language.tertiary(
             "%s<%s" % (var, len(self.layer.data)), expr, self.layer.default
@@ -1202,21 +1188,10 @@ class PaletteOuterSolution(Solution):
         # Apply OuterLayer's inverse arithmetic operations
         if self.layer.mult != 1:
             expr = "%d*%s" % (self.layer.mult, expr)
-        if self.layer.identity:
-            expr = language.wrapping_add(language.cast(retType, var), expr)
-            if self.layer.bias > 0:
-                expr = language.wrapping_add(
-                    language.uint_literal(self.layer.bias, retType), expr
-                )
-            elif self.layer.bias < 0:
-                expr = language.wrapping_sub(
-                    expr, language.uint_literal(-self.layer.bias, retType)
-                )
-        else:
-            if self.layer.bias > 0:
-                expr = "%d+%s" % (self.layer.bias, expr)
-            elif self.layer.bias < 0:
-                expr = "%s-%d" % (expr, -self.layer.bias)
+        if self.layer.bias > 0:
+            expr = "%d+%s" % (self.layer.bias, expr)
+        elif self.layer.bias < 0:
+            expr = "%s-%d" % (expr, -self.layer.bias)
 
         # Bounds check
         expr = language.tertiary(
@@ -1312,14 +1287,7 @@ class OuterLayer(Layer):
     3. **Bias + GCD**: subtract bias, then divide by GCD of remainders.
        Generated code: ``bias + mult * inner(u)``.
 
-    4. **Identity subtraction**: subtract the index from each value.
-       Useful when data[i] ≈ i (e.g. Unicode mirroring tables where
-       most characters map to themselves).  Stores residuals
-       data[i] - i which are mostly zero.
-       Generated code: ``u + inner(u)`` (combinable with bias/GCD).
-
-    The best reduction (fewest bits) wins.  All four strategies (and
-    combinations of identity with bias/GCD) are tried.
+    The best reduction (fewest bits) wins.
 
     **Mult bake-in**: after choosing a GCD factor, if multiplying the
     stored values back up doesn't change the C integer type (e.g. both
@@ -1345,32 +1313,14 @@ class OuterLayer(Layer):
 
         self.minV, self.maxV = min(data), max(data)
 
-        identity = False
         bias = 0
         mult = 1
         unitBits = binaryBitsFor(self.minV, self.maxV)
         if isinstance(self.minV, int) and isinstance(self.maxV, int):
             unitBits, bias, mult = _best_reduction(data, self.minV, self.maxV)
 
-            # Try identity subtraction: store data[i] - i instead.
-            # Useful when data is approximately linear (data[i] ≈ i),
-            # e.g. Unicode mirroring tables where most chars map to themselves.
-            deltas = [d - i for i, d in enumerate(self.data)]
-            dMin, dMax = min(deltas), max(deltas)
-            id_unitBits, id_bias, id_mult = _best_reduction(deltas, dMin, dMax)
-
-            if id_unitBits < unitBits:
-                unitBits = id_unitBits
-                bias = id_bias
-                mult = id_mult
-                identity = True
-
             # Compute the stored values after all reductions.
-            # ``base`` is self.data with identity subtraction applied (if used).
-            if identity:
-                base = deltas
-            else:
-                base = list(self.data)
+            base = list(self.data)
             data = [(d - bias) // mult for d in base]
 
             # Bake in width multiplier if doing so doesn't enlarge the
@@ -1401,9 +1351,6 @@ class OuterLayer(Layer):
 
         self.unitBits = unitBits
         self.extraOps = subByteAccessOps if self.unitBits < 8 else 0
-        self.identity = identity if isinstance(self.minV, int) else False
-        if self.identity:
-            self.extraOps += 1
         self.bias = bias
         if bias:
             self.extraOps += 1

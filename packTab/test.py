@@ -481,7 +481,6 @@ class TestOuterLayer:
 
     def test_bias_optimization(self):
         # bias gets baked in when original data fits in same type
-        # Use non-linear data so identity optimization doesn't interfere
         layer = OuterLayer([100, 105, 110, 115], 0)
         assert layer.bias == 0  # baked in: [100..115] fits in uint8_t
 
@@ -743,35 +742,6 @@ class TestEndToEnd:
         code = _generate(data, language=language)
         _compile_and_run(code, data, 0, language)
 
-    def test_identity(self, language):
-        data = list(range(64))
-        code = _generate(data, language=language)
-        _compile_and_run(code, data, 0, language)
-
-    def test_identity_with_exceptions(self, language):
-        data = list(range(32))
-        data[10] = 99
-        data[20] = 200
-        code = _generate(data, language=language)
-        _compile_and_run(code, data, 0, language)
-
-    def test_identity_negative_deltas(self, language):
-        data = [0, 1, 2, 3, 5, 4, 6, 7]
-        code = _generate(data, language=language)
-        _compile_and_run(code, data, 0, language)
-
-    def test_identity_large_mirroring(self, language):
-        data = list(range(256))
-        data[40] = 41
-        data[41] = 40
-        data[60] = 62
-        data[62] = 60
-        data[91] = 93
-        data[93] = 91
-        code = _generate(data, language=language)
-        _compile_and_run(code, data, 0, language)
-
-
 class TestEndToEndRust:
     """Rust-specific code generation checks."""
 
@@ -843,7 +813,6 @@ class TestBiasBakeIn:
     """Verify that bias is baked in when type doesn't change."""
 
     def test_bake_in_small_bias(self):
-        # Use non-linear data so identity optimization doesn't interfere
         layer = OuterLayer([100, 105, 110, 115], 0)
         assert layer.bias == 0
 
@@ -852,41 +821,12 @@ class TestBiasBakeIn:
         assert layer.bias == 1000
 
     def test_bake_in_no_bias_in_code(self):
-        # Use non-linear data so identity optimization doesn't interfere
         code = _generate([200, 205, 210, 215], language="c")
         assert "200+" not in code
 
     def test_no_bake_in_has_bias_in_code(self):
         code = _generate([1000, 1003, 1001, 1002], language="c")
         assert "1000+" in code
-
-
-class TestIdentity:
-    """Verify identity subtraction optimization for near-linear data."""
-
-    def test_identity_chosen_for_linear_data(self):
-        data = list(range(16))
-        layer = OuterLayer(data, 0)
-        assert layer.identity is True
-
-    def test_identity_not_chosen_for_nonlinear(self):
-        data = [0, 5, 10, 15]
-        layer = OuterLayer(data, 0)
-        assert layer.identity is False
-
-    def test_identity_with_offset(self):
-        data = [100 + i for i in range(8)]
-        layer = OuterLayer(data, 0)
-        assert layer.identity is True
-
-    def test_identity_no_array_for_pure_identity(self):
-        code = _generate(list(range(8)), language="c")
-        assert "u8[" not in code
-
-    def test_identity_in_code(self):
-        data = [0, 1, 2, 5, 4, 5, 6, 7]
-        code = _generate(data, language="c")
-        assert "(u)+" in code
 
 
 class TestStringData:
@@ -972,7 +912,7 @@ class TestCLI:
         assert "fn data_get" in r.stdout
 
     def test_rust_unsafe_output(self):
-        # Use non-linear data to avoid identity opt and inlining
+        # Use non-linear data to avoid inlining
         args = [str(i * 7 % 256) for i in range(256)]
         r = self._run("--rust", "--unsafe", *args)
         assert r.returncode == 0

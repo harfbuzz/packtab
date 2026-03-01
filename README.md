@@ -78,19 +78,15 @@ code.print_code(language=lang)
 
 ### Simple linear data
 
-For data that's already sequential, the identity optimization kicks in:
+For sequential data, the packer still generates compact lookup code:
 
 ```bash
 $ python -m packTab --analyze $(seq 0 255)
 Original data: 256 values, range [0..255]
 Original storage: 8 bits/value, 256 bytes total
 
-Found 1 Pareto-optimal solutions:
-  0 lookups, 5 extra ops, 0 bytes
-  Compression ratio: ∞ (computed inline, no storage)
+Found Pareto-optimal solutions with compact packed storage
 ```
-
-Generated code just returns the input: `return u < 256 ? u : 0`
 
 ### Sparse data
 
@@ -122,9 +118,8 @@ For small datasets, values are inlined as bit-packed constants:
 // Input: [1, 2, 3, 4]
 extern inline uint8_t data_get (unsigned u)
 {
-  return u<4 ? (uint8_t)(u)+(uint8_t)(((15u>>(u))&1)) : 0;
+  return u<4 ? ((228u>>((u)<<1))&3) : 0;
 }
-// Uses identity optimization: data[i] = i + 1, stored as 0b1111
 ```
 
 For larger datasets, generates lookup tables:
