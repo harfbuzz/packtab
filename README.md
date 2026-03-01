@@ -29,8 +29,14 @@ python -m packTab --analyze 1 2 3 4
 # Read data from stdin
 seq 0 255 | python -m packTab --rust
 
-# Tune compression (higher = smaller, slower)
+# Tune compression (1..9 = heuristic; 10 = absolute minimum bytes)
 echo "1 2 3 4" | python -m packTab --compression 5
+
+# Force flat / unsplit encoding
+echo "1 2 3 4" | python -m packTab --compression 0
+
+# Force absolute minimum table bytes
+echo "1 2 3 4" | python -m packTab --compression 10
 ```
 
 ### As a library
@@ -49,7 +55,9 @@ code.print_code(language="c")
 The `pack_table` function accepts:
 - A list of integers, or a dict mapping integer keys to values
 - `default`: value for missing keys (default `0`)
-- `compression`: tunes the size-vs-speed tradeoff (default `1`)
+- `compression`: tuning knob with sentinel endpoints: `0` prefers flat
+  encoding, `1..9` use the size/speed heuristic, and `10` minimizes raw
+  table bytes (default `1`)
 - `mapping`: optional mapping between string values and integers
 
 ### Rust with unsafe access

@@ -56,7 +56,8 @@ def main(args=None):
         type=str,
         default="1",
         help=(
-            "size vs speed tradeoff; higher = smaller tables (default: 1). "
+            "size vs speed tradeoff: 0 = flat, 1..9 = heuristic, "
+            "10 = minimum bytes (default: 1). "
             "For C: use '1,9' to generate both variants with "
             "#ifdef __OPTIMIZE_SIZE__"
         ),

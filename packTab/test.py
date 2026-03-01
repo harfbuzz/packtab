@@ -556,11 +556,16 @@ class TestPickSolution:
         best = pick_solution(solutions, compression=1)
         assert isinstance(best, (InnerSolution, OuterSolution))
 
-    def test_high_compression_prefers_smaller(self):
+    def test_compression_zero_picks_flat_solution(self):
         solutions = pack_table(list(range(64)), default=0, compression=None)
-        small = pick_solution(solutions, compression=10)
-        fast = pick_solution(solutions, compression=0.01)
-        assert small.fullCost <= fast.fullCost or small.nLookups >= fast.nLookups
+        best = pick_solution(solutions, compression=0)
+        assert best.palette is False
+        assert best.next.bits == 0
+
+    def test_compression_ten_picks_minimum_raw_cost(self):
+        solutions = pack_table(list(range(64)), default=0, compression=None)
+        best = pick_solution(solutions, compression=10)
+        assert best.cost == min(s.cost for s in solutions)
 
 
 # ── End-to-end code generation ─────────────────────────────────────

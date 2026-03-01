@@ -1591,15 +1591,31 @@ def pick_solution(
 
     Args:
         solutions: List of OuterSolution objects (Pareto frontier).
-        compression: Controls size-vs-speed tradeoff. Higher values prefer
-            smaller tables. Defaults to 1.
+        compression: Controls size-vs-speed tradeoff. Values 1..9 use the
+            historical heuristic. Values <= 0 pick a flat / unsplit solution
+            when available. Values >= 10 minimize raw table bytes. Defaults
+            to 1.
 
     Returns:
         The OuterSolution with the best score.
 
-    The scoring function ``nLookups + compression * log2(fullCost)``
-    balances lookup count against log-scaled storage cost.
+    For 1..9, the scoring function
+    ``nLookups + compression * log2(fullCost)`` balances lookup count
+    against log-scaled storage cost.
     """
+    if compression <= 0:
+        flat = [
+            s for s in solutions
+            if not isinstance(s, PaletteOuterSolution)
+            and getattr(getattr(s, "next", None), "bits", None) == 0
+        ]
+        if flat:
+            return min(flat, key=lambda s: (s.nExtraOps, s.cost))
+        return min(solutions, key=lambda s: (s.nLookups, s.nExtraOps, s.cost))
+
+    if compression >= 10:
+        return min(solutions, key=lambda s: (s.cost, s.nLookups, s.nExtraOps))
+
     return min(solutions, key=lambda s: s.nLookups + compression * log2(s.fullCost))
 
 
