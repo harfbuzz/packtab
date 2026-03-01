@@ -951,6 +951,27 @@ class Layer:
         self.solutions = []
 
 
+def _aligned_base_for_live_range(data, default):
+    """Return the aligned base for the smallest dyadic interval covering live data.
+
+    The live range is the span from the first non-default value to the last
+    non-default value. The returned base is the start of the smallest power-of-two
+    aligned interval containing that span. If all values equal the default, the
+    base is zero.
+    """
+    first = next((i for i, v in enumerate(data) if v != default), None)
+    if first is None:
+        return 0
+
+    last = len(data) - 1 - next(i for i, v in enumerate(reversed(data)) if v != default)
+    differing_bits = first ^ last
+    if differing_bits == 0:
+        return first
+
+    mask = (1 << differing_bits.bit_length()) - 1
+    return first & ~mask
+
+
 class InnerLayer(Layer):
     """Recursive binary-split engine producing multi-level lookup solutions.
 
@@ -1110,15 +1131,20 @@ class OuterSolution(Solution):
         inputVar = var
         if name:
             var = "u"
-        expr = var
 
         if isinstance(language, str):
             language = languages[language]
 
         typ = language.type_for(self.layer.minV, self.layer.maxV)
         retType = fastType(typ)
+        lookup_var = var
+        if self.layer.base:
+            lookup_var = language.wrapping_sub(
+                var, language.usize_literal(self.layer.base)
+            )
+        expr = lookup_var
         if self.next:
-            (_, expr) = self.next.genCode(code, None, var, language=language)
+            (_, expr) = self.next.genCode(code, None, lookup_var, language=language)
             # Cast inner result to return type so that mult/bias arithmetic
             # happens at the correct width.  Rust requires this because it
             # has no implicit integer widening or narrowing.
@@ -1131,9 +1157,8 @@ class OuterSolution(Solution):
         elif self.layer.bias < 0:
             expr = "%s-%d" % (expr, -self.layer.bias)
 
-        expr = language.tertiary(
-            "%s<%s" % (var, len(self.layer.data)), expr, self.layer.default
-        )
+        span = language.usize_literal(len(self.layer.data))
+        expr = language.tertiary("%s<%s" % (lookup_var, span), expr, self.layer.default)
 
         if name:
             funcName = code.addFunction(
@@ -1174,10 +1199,15 @@ class PaletteOuterSolution(Solution):
         # Generate palette array containing unique values
         palette_typ = language.type_for(min(self.palette), max(self.palette))
         palette_name, _ = code.addArray(palette_typ, "palette", self.palette)
+        lookup_var = var
+        if self.layer.base:
+            lookup_var = language.wrapping_sub(
+                var, language.usize_literal(self.layer.base)
+            )
 
         # Get index lookup expression from InnerLayer (self.next)
         # This returns an expression that evaluates to a palette index
-        (_, index_expr) = self.next.genCode(code, None, var, language=language)
+        (_, index_expr) = self.next.genCode(code, None, lookup_var, language=language)
 
         # Look up value in palette: palette[index]
         # Cast index to usize for Rust array indexing
@@ -1194,9 +1224,8 @@ class PaletteOuterSolution(Solution):
             expr = "%s-%d" % (expr, -self.layer.bias)
 
         # Bounds check
-        expr = language.tertiary(
-            "%s<%s" % (var, len(self.layer.data)), expr, self.layer.default
-        )
+        span = language.usize_literal(len(self.layer.data))
+        expr = language.tertiary("%s<%s" % (lookup_var, span), expr, self.layer.default)
 
         if name:
             funcName = code.addFunction(
@@ -1295,15 +1324,21 @@ class OuterLayer(Layer):
     multiplication.  This trades slightly larger sub-byte storage for
     one fewer runtime operation.
 
-    After reduction, trailing default values are stripped from the data
-    (since they can be handled by the bounds check in the generated
-    ternary/if expression).  The reduced data is then passed to
+    The stored span is rebased to the smallest power-of-two-aligned
+    interval containing all non-default values. Trailing default values
+    in that rebased span are then stripped, since they can be handled by
+    the generated bounds check. The reduced data is then passed to
     InnerLayer, and each InnerLayer solution is wrapped in an
     OuterSolution that accounts for the extra bias/mult ops.
     """
 
-    def __init__(self, data, default):
+    def __init__(self, data, default, base=None):
         data = list(data)
+        if base is None:
+            base = _aligned_base_for_live_range(data, default)
+        self.base = base
+        data = data[self.base :]
+
         # Strip trailing default values — the generated bounds check
         # (``u < len``) handles out-of-range indices.
         while len(data) > 1 and data[-1] == default:

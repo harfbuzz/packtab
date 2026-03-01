@@ -479,6 +479,15 @@ class TestOuterLayer:
         layer = OuterLayer([1, 2, 3, 0, 0, 0], 0)
         assert layer.data == [1, 2, 3]
 
+    def test_culls_aligned_leading_defaults(self):
+        layer = OuterLayer([0] * 16 + [1, 2, 3], 0)
+        assert layer.base == 16
+        assert layer.data == [1, 2, 3]
+
+    def test_keeps_zero_base_when_live_range_crosses_aligned_block(self):
+        layer = OuterLayer([0] * 8 + [1] * 20, 0)
+        assert layer.base == 0
+
     def test_bias_optimization(self):
         # bias gets baked in when original data fits in same type
         layer = OuterLayer([100, 105, 110, 115], 0)
@@ -684,6 +693,11 @@ class TestEndToEnd:
         data[7] = 42
         data[50] = 99
         data[99] = 1
+        code = _generate(data, language=language)
+        _compile_and_run(code, data, 0, language)
+
+    def test_sparse_with_aligned_prefix_defaults(self, language):
+        data = [0] * 16 + [5, 9, 11]
         code = _generate(data, language=language)
         _compile_and_run(code, data, 0, language)
 
