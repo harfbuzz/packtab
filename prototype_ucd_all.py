@@ -308,12 +308,6 @@ def sanitize_symbol(prop: str) -> str:
     return "".join(ch if ch.isalnum() else "_" for ch in prop)
 
 
-def is_fully_inlined(solution, symbol: str) -> bool:
-    code = Code("probe")
-    solution.genCode(code, f"{sanitize_symbol(symbol)}_get", language="c", private=False)
-    return not code.arrays
-
-
 def string_storage_bytes(value: str) -> int:
     return len(value.encode("utf-8")) + 1
 
@@ -323,6 +317,8 @@ def analyze_shared_string_pool(generated_props: list[dict[str, object]]) -> dict
     local_bytes = 0
     shared_strings: set[str] = set()
     string_occurrences: defaultdict[str, set[str]] = defaultdict(set)
+    current_table_bytes = 0
+    pooled_table_bytes = 0
 
     for item in generated_props:
         prop = item["property"]
@@ -333,10 +329,23 @@ def analyze_shared_string_pool(generated_props: list[dict[str, object]]) -> dict
         candidate_props.append(prop)
         local_bytes += sum(string_storage_bytes(value) for value in values)
         shared_strings.update(values)
+        current_table_bytes += item["solution"].cost
         for value in values:
             string_occurrences[value].add(prop)
 
     shared_bytes = sum(string_storage_bytes(value) for value in shared_strings)
+    global_mapping = {value: i for i, value in enumerate(sorted(shared_strings))}
+    for item in generated_props:
+        prop = item["property"]
+        mapping = item["mapping"]
+        if mapping is None or prop not in SHARED_STRING_POOL_CANDIDATES:
+            continue
+        transformed_values = item["transformed_values"]
+        pooled_data = [global_mapping[value] for value in transformed_values]
+        pooled_default = global_mapping[item["default"]]
+        pooled_solution = pack_table(pooled_data, default=pooled_default, compression=10)
+        pooled_table_bytes += pooled_solution.cost
+
     repeated = [
         {
             "value": value,
@@ -353,7 +362,12 @@ def analyze_shared_string_pool(generated_props: list[dict[str, object]]) -> dict
         "property_count": len(candidate_props),
         "local_string_bytes": local_bytes,
         "shared_string_bytes": shared_bytes,
-        "potential_savings": local_bytes - shared_bytes,
+        "current_table_bytes": current_table_bytes,
+        "pooled_table_bytes": pooled_table_bytes,
+        "current_total_bytes": current_table_bytes + local_bytes,
+        "pooled_total_bytes": pooled_table_bytes + shared_bytes,
+        "potential_savings": (current_table_bytes + local_bytes)
+        - (pooled_table_bytes + shared_bytes),
         "reused_string_count": len(repeated),
         "most_reused_strings": repeated[:20],
     }
@@ -384,7 +398,6 @@ def analyze_property(
         "bytes": solution.cost,
         "full_cost": solution.fullCost,
         "transform": transform[0] if transform else "",
-        "fully_inlined": is_fully_inlined(solution, prop),
     }
     generated = {
         "property": prop,
@@ -392,6 +405,7 @@ def analyze_property(
         "solution": solution,
         "mapping": mapping,
         "default": default,
+        "transformed_values": transformed_values,
     }
     return result, generated
 
@@ -498,14 +512,12 @@ def main() -> int:
 
     total_bytes = sum(item["bytes"] for item in results)
     total_full_cost = sum(item["full_cost"] for item in results)
-    inlined = [item["property"] for item in results if item["fully_inlined"]]
     summary = {
         "unicode_version": UNICODE_VERSION,
         "compression": args.compression,
         "profile": args.profile,
         "excluded_properties": sorted(excluded),
         "property_count": len(results),
-        "fully_inlined_properties": inlined,
         "total_bytes": total_bytes,
         "total_full_cost": total_full_cost,
         "properties": results,
@@ -515,15 +527,14 @@ def main() -> int:
     print()
     print(f"Unicode {UNICODE_VERSION} non-Unihan prototype ({args.profile})")
     print(f"Properties analyzed: {len(results)}")
-    print(f"Fully inlined properties: {len(inlined)}")
     print(f"Total packed bytes: {total_bytes}")
     print(f"Total full cost: {total_full_cost}")
     pool = summary["shared_string_pool"]
     print(
         "Shared string pool candidates: "
         f"{pool['property_count']} properties, "
-        f"{pool['local_string_bytes']} local bytes -> "
-        f"{pool['shared_string_bytes']} shared bytes "
+        f"{pool['current_total_bytes']} current bytes -> "
+        f"{pool['pooled_total_bytes']} pooled bytes "
         f"(save {pool['potential_savings']})"
     )
 
