@@ -40,6 +40,15 @@ DEFAULT_RUNTIME_EXCLUDES = {
     "na1",
 }
 
+DEPRECATED_PROPERTIES = {
+    "FC_NFKC",
+    "Gr_Link",
+    "XO_NFC",
+    "XO_NFD",
+    "XO_NFKC",
+    "XO_NFKD",
+}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -263,6 +272,22 @@ PROPERTY_TRANSFORMS: dict[str, tuple[str, Callable[[list], list]]] = {
     "dm": ("Hangul syllables elided algorithmically", transform_dm_hangul),
 }
 
+SHARED_STRING_POOL_CANDIDATES = {
+    "FC_NFKC",
+    "EqUIdeo",
+    "bpb",
+    "cf",
+    "dm",
+    "lc",
+    "nv",
+    "scf",
+    "slc",
+    "stc",
+    "suc",
+    "tc",
+    "uc",
+}
+
 
 def build_packed_data(values: list) -> tuple[list[int], dict | None, object]:
     counts = Counter(values)
@@ -287,6 +312,51 @@ def is_fully_inlined(solution, symbol: str) -> bool:
     code = Code("probe")
     solution.genCode(code, f"{sanitize_symbol(symbol)}_get", language="c", private=False)
     return not code.arrays
+
+
+def string_storage_bytes(value: str) -> int:
+    return len(value.encode("utf-8")) + 1
+
+
+def analyze_shared_string_pool(generated_props: list[dict[str, object]]) -> dict[str, object]:
+    candidate_props = []
+    local_bytes = 0
+    shared_strings: set[str] = set()
+    string_occurrences: defaultdict[str, set[str]] = defaultdict(set)
+
+    for item in generated_props:
+        prop = item["property"]
+        mapping = item["mapping"]
+        if mapping is None or prop not in SHARED_STRING_POOL_CANDIDATES:
+            continue
+        values = set(mapping.keys())
+        candidate_props.append(prop)
+        local_bytes += sum(string_storage_bytes(value) for value in values)
+        shared_strings.update(values)
+        for value in values:
+            string_occurrences[value].add(prop)
+
+    shared_bytes = sum(string_storage_bytes(value) for value in shared_strings)
+    repeated = [
+        {
+            "value": value,
+            "properties": sorted(props),
+            "bytes": string_storage_bytes(value),
+        }
+        for value, props in string_occurrences.items()
+        if len(props) > 1
+    ]
+    repeated.sort(key=lambda item: (-len(item["properties"]), -item["bytes"], item["value"]))
+
+    return {
+        "candidate_properties": sorted(candidate_props),
+        "property_count": len(candidate_props),
+        "local_string_bytes": local_bytes,
+        "shared_string_bytes": shared_bytes,
+        "potential_savings": local_bytes - shared_bytes,
+        "reused_string_count": len(repeated),
+        "most_reused_strings": repeated[:20],
+    }
 
 
 def analyze_property(
@@ -376,7 +446,7 @@ def collect_property_sources(
         long_name = aliases.get(prop, {}).get("long", prop)
         metadata[prop] = {"source": SUPPLEMENT_LOADERS[prop][0], "long": str(long_name)}
 
-    props = set(metadata) - IGNORED_UNIHAN_PROPERTIES
+    props = set(metadata) - IGNORED_UNIHAN_PROPERTIES - DEPRECATED_PROPERTIES
     return props, metadata
 
 
@@ -439,6 +509,7 @@ def main() -> int:
         "total_bytes": total_bytes,
         "total_full_cost": total_full_cost,
         "properties": results,
+        "shared_string_pool": analyze_shared_string_pool(generated_props),
     }
 
     print()
@@ -447,6 +518,14 @@ def main() -> int:
     print(f"Fully inlined properties: {len(inlined)}")
     print(f"Total packed bytes: {total_bytes}")
     print(f"Total full cost: {total_full_cost}")
+    pool = summary["shared_string_pool"]
+    print(
+        "Shared string pool candidates: "
+        f"{pool['property_count']} properties, "
+        f"{pool['local_string_bytes']} local bytes -> "
+        f"{pool['shared_string_bytes']} shared bytes "
+        f"(save {pool['potential_savings']})"
+    )
 
     if args.json_out:
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
