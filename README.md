@@ -156,6 +156,30 @@ on the `compression` parameter.
 pytest
 ```
 
+## Unicode Prototype
+
+To prototype an "all properties except Unihan" UCD build against Unicode 17.0.0,
+download the non-Unihan XML plus the text UCD bundle and analyze every
+per-codepoint property with:
+
+```bash
+python prototype_ucd_all.py --download \
+  --json-out data/ucd/17.0.0/prototype-summary.json
+```
+
+The prototype uses `ucd.nounihan.flat.zip` as the primary source and
+supplements the small set of non-Unihan properties not present in the XML
+(`FC_NFKC`, `Gr_Link`, `Hyphen`, `Name_Alias`, `XO_*`, and empty `isc`)
+from the text UCD files. It also applies a couple of property-specific
+prototype transforms: `bmg` is packed as `bmg(u) - u`, and Hangul syllables
+are elided from `dm` so they can be handled algorithmically.
+
+By default it uses a runtime-oriented profile that excludes names and the
+specialist `kEH_*`, `kTGT_*`, and `kNSHU_*` property families. Use
+`--profile full` to analyze the full non-Unihan property surface instead.
+Pass `--c-out path/to/ucd_runtime.c` to also emit a single C source file with
+one accessor per selected property.
+
 ## History
 
 I first wrote something like this back in 2001 when I needed it in FriBidi:
