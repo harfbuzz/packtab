@@ -419,6 +419,20 @@ class TestCode:
         assert "20" in output
         assert "static inline uint8_t t_get" in output
 
+    def test_print_code_c_function_comment(self):
+        code = Code("t")
+        code.addFunction(
+            "uint8_t",
+            "get",
+            (("unsigned", "u"),),
+            "u+1",
+            comment="packtab: [2^4,2^3]",
+        )
+        buf = io.StringIO()
+        code.print_code(file=buf, language="c")
+        output = buf.getvalue()
+        assert "/* packtab: [2^4,2^3] */" in output
+
     def test_print_code_rust(self):
         code = Code("t")
         code.addArray("u8", "u8", [10, 20])
@@ -899,6 +913,18 @@ class TestStringData:
         code.print_code(file=out, language="c")
         output = out.getvalue()
         assert "u8[" in output or "u8 " in output
+
+    def test_shape_comment_in_generated_function(self):
+        data = {32: 1, 33: 2, 34: 3, 35: 4}
+        solution = pack_table(data, default=0, compression=10)
+        code = Code("test")
+        solution.genCode(code, "lookup", language="c", private=False)
+        out = io.StringIO()
+        code.print_code(file=out, language="c")
+        output = out.getvalue()
+        assert "/* packtab:" in output
+        assert "base=32" in output
+        assert "[2^4]" in output
 
 
 # ── CLI ────────────────────────────────────────────────────────────

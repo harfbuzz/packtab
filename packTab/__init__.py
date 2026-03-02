@@ -226,6 +226,8 @@ class Language:
         decl = self.declare_function(linkage, function.retType, name, function.args)
         print(decl)
         print(self.function_start)
+        if function.comment:
+            print("  /* %s */" % function.comment)
         print("  %s" % self.return_stmt(function.body))
         print(self.function_end)
 
@@ -510,12 +512,22 @@ class Array:
 class Function:
     """A generated inline function with a single-expression body."""
 
-    def __init__(self, retType, args, body, *, private=True, inline_always=False):
+    def __init__(
+        self,
+        retType,
+        args,
+        body,
+        *,
+        private=True,
+        inline_always=False,
+        comment=None,
+    ):
         self.retType = retType
         self.args = args
         self.body = body
         self.private = private
         self.inline_always = inline_always
+        self.comment = comment
 
 
 class Code:
@@ -550,6 +562,7 @@ class Code:
         *,
         private: bool = True,
         inline_always: bool = False,
+        comment: Optional[str] = None,
     ) -> str:
         name = self.nameFor(name)
         if name in self.functions:
@@ -558,9 +571,15 @@ class Code:
             assert self.functions[name].body == body
             assert self.functions[name].private == private
             assert self.functions[name].inline_always == inline_always
+            assert self.functions[name].comment == comment
         else:
             self.functions[name] = Function(
-                retType, args, body, private=private, inline_always=inline_always
+                retType,
+                args,
+                body,
+                private=private,
+                inline_always=inline_always,
+                comment=comment,
             )
         return name
 
@@ -715,6 +734,16 @@ class InnerSolution(Solution):
     def __init__(self, layer, next, nLookups, nExtraOps, cost, bits=0):
         Solution.__init__(self, layer, next, nLookups, nExtraOps, cost)
         self.bits = bits
+
+    def shape_terms(self):
+        terms = []
+        if self.next:
+            terms.extend(self.next.shape_terms())
+        if self.bits:
+            terms.append("2^%d" % self.bits)
+        else:
+            terms.append("2^%d" % self.layer.unitBits)
+        return terms
 
     def genCode(self, code, name=None, var="u", language="c", data_multiplier=1):
         """Generate lookup code for this solution level.
@@ -1136,6 +1165,19 @@ class OuterSolution(Solution):
         Solution.__init__(self, layer, next, nLookups, nExtraOps, cost)
         self.palette = False
 
+    def shape_comment(self):
+        terms = []
+        if self.layer.base:
+            terms.append("base=%d" % self.layer.base)
+        terms.append("[" + ",".join(self.next.shape_terms()) + "]")
+        if self.layer.mult != 1:
+            terms.append("*%d" % self.layer.mult)
+        if self.layer.bias > 0:
+            terms.append("+%d" % self.layer.bias)
+        elif self.layer.bias < 0:
+            terms.append("-%d" % (-self.layer.bias))
+        return "packtab: " + " ".join(terms)
+
     def genCode(self, code, name=None, var="u", language="c", private=True):
         inputVar = var
         if name:
@@ -1171,7 +1213,12 @@ class OuterSolution(Solution):
 
         if name:
             funcName = code.addFunction(
-                retType, name, ((language.usize, "u"),), expr, private=private
+                retType,
+                name,
+                ((language.usize, "u"),),
+                expr,
+                private=private,
+                comment=self.shape_comment(),
             )
             expr = "%s(%s)" % (funcName, inputVar)
 
@@ -1192,6 +1239,20 @@ class PaletteOuterSolution(Solution):
         Solution.__init__(self, layer, next, nLookups, nExtraOps, cost)
         self.palette = palette  # List of unique values
         self.value_to_index = value_to_index  # Dict mapping value -> palette index
+
+    def shape_comment(self):
+        terms = []
+        if self.layer.base:
+            terms.append("base=%d" % self.layer.base)
+        terms.append("[" + ",".join(self.next.shape_terms()) + "]")
+        terms.append("palette[%d]" % len(self.palette))
+        if self.layer.mult != 1:
+            terms.append("*%d" % self.layer.mult)
+        if self.layer.bias > 0:
+            terms.append("+%d" % self.layer.bias)
+        elif self.layer.bias < 0:
+            terms.append("-%d" % (-self.layer.bias))
+        return "packtab: " + " ".join(terms)
 
     def genCode(self, code, name=None, var="u", language="c", private=True):
         inputVar = var
@@ -1238,7 +1299,12 @@ class PaletteOuterSolution(Solution):
 
         if name:
             funcName = code.addFunction(
-                retType, name, ((language.usize, "u"),), expr, private=private
+                retType,
+                name,
+                ((language.usize, "u"),),
+                expr,
+                private=private,
+                comment=self.shape_comment(),
             )
             expr = "%s(%s)" % (funcName, inputVar)
 
