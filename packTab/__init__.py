@@ -380,6 +380,10 @@ class LanguageRust(Language):
         return "%sfn %s (%s) -> %s" % (linkage, name, args, retType)
 
     def print_function(self, name, function, *, print=print):
+        if self.unsafe_array_access:
+            print("#[allow(dead_code, unused_parens, unused_unsafe)]")
+        else:
+            print("#[allow(dead_code, unused_parens)]")
         # Add #[inline] attribute for better optimization hints
         if function.inline_always:
             print("#[inline(always)]")
