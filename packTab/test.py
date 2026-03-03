@@ -1490,3 +1490,32 @@ class TestPaletteEncoding:
         # Should not have offset addition in palette access (e.g., not "data_u32[5 + ...]")
         # The palette access should be clean: palette[index]
         assert "palette[" in result or "palette" in result
+
+
+class TestInferredDefault:
+    def test_none_default_uses_boundary_candidates(self):
+        data = [9, 1, 2, 3, 0, 0, 0]
+
+        inferred = pack_table(data, default=None, compression=None)
+        explicit = pack_table(data, default=0, compression=None)
+
+        assert any(
+            (a.nLookups, a.nExtraOps, a.cost) == (b.nLookups, b.nExtraOps, b.cost)
+            for a in inferred
+            for b in explicit
+        )
+
+    def test_none_default_considers_both_boundary_values(self):
+        data = [7, 0, 0, 0, 1]
+
+        inferred = pack_table(data, default=None, compression=None)
+        left = pack_table(data, default=7, compression=None)
+        right = pack_table(data, default=1, compression=None)
+
+        inferred_costs = {(s.nLookups, s.nExtraOps, s.cost) for s in inferred}
+        candidate_costs = {
+            (s.nLookups, s.nExtraOps, s.cost) for s in left + right
+        }
+
+        assert inferred_costs <= candidate_costs
+        assert inferred_costs

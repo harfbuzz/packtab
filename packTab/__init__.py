@@ -1538,7 +1538,7 @@ class OuterLayer(Layer):
 
 def pack_table(
     data: Union[List[Union[int, str]], Dict[int, Union[int, str]]],
-    default: Union[int, str] = 0,
+    default: Optional[Union[int, str]] = 0,
     compression: Optional[float] = 1,
     mapping: Optional[Dict[Any, Any]] = None,
 ) -> Union["OuterSolution", List["OuterSolution"]]:
@@ -1548,7 +1548,9 @@ def pack_table(
         data: Either a dictionary mapping integer keys to values, or an
             iterable containing values for keys starting at zero. Values must
             all be integers, or all strings.
-        default: Value to be used for keys not specified in data. Defaults
+        default: Value to be used for keys not specified in data. If None,
+            tries both boundary values and keeps the combined Pareto frontier.
+            Inferred defaults are only supported for list input. Defaults
             to zero.
         compression: Tunes the size-vs-speed tradeoff. Higher values prefer
             smaller tables. If None, returns all Pareto-optimal solutions.
@@ -1610,6 +1612,8 @@ def pack_table(
 
     # Set up data as a list.
     if isinstance(data, dict):
+        if default is None:
+            raise ValueError("default=None is only supported for list input")
         if not all(isinstance(k, int) for k in data.keys()):
             raise TypeError("dict keys must be integers")
         minK = min(data.keys())
@@ -1633,25 +1637,39 @@ def pack_table(
     if not isinstance(default, int) and mapping is not None:
         default = mapping[default]
 
-    aligned_layer = OuterLayer(data, default)
-    solutions = list(aligned_layer.solutions)
+    def build_solutions_for_default(default_value):
+        aligned_layer = OuterLayer(data, default_value)
+        solutions = list(aligned_layer.solutions)
 
-    first_non_default = _first_non_default_index(data, default)
-    if (
-        first_non_default is not None
-        and first_non_default != aligned_layer.base
-    ):
-        exact_layer = OuterLayer(data, default, base=first_non_default)
-        inline_exact = any(
-            not isinstance(s, PaletteOuterSolution)
-            and getattr(getattr(s, "next", None), "bits", None) == 0
-            and s.next.layer.bytes <= 8
-            and isinstance(s.next.layer.minV, int)
-            and s.next.layer.minV >= 0
-            for s in exact_layer.solutions
-        )
-        if inline_exact:
-            solutions = _prune_pareto_solutions(solutions + exact_layer.solutions)
+        first_non_default = _first_non_default_index(data, default_value)
+        if (
+            first_non_default is not None
+            and first_non_default != aligned_layer.base
+        ):
+            exact_layer = OuterLayer(data, default_value, base=first_non_default)
+            inline_exact = any(
+                not isinstance(s, PaletteOuterSolution)
+                and getattr(getattr(s, "next", None), "bits", None) == 0
+                and s.next.layer.bytes <= 8
+                and isinstance(s.next.layer.minV, int)
+                and s.next.layer.minV >= 0
+                for s in exact_layer.solutions
+            )
+            if inline_exact:
+                solutions = _prune_pareto_solutions(solutions + exact_layer.solutions)
+
+        return solutions
+
+    if default is None:
+        defaults = [data[0]]
+        if data[-1] != data[0]:
+            defaults.append(data[-1])
+        solutions = []
+        for default_value in defaults:
+            solutions.extend(build_solutions_for_default(default_value))
+        solutions = _prune_pareto_solutions(solutions)
+    else:
+        solutions = build_solutions_for_default(default)
 
     if compression is None:
         solutions.sort(key=lambda s: -s.fullCost)

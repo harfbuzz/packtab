@@ -54,7 +54,8 @@ code.print_code(language="c")
 
 The `pack_table` function accepts:
 - A list of integers, or a dict mapping integer keys to values
-- `default`: value for missing keys (default `0`)
+- `default`: value for missing keys (default `0`); pass `None` for list
+  input to try both boundary values and merge the resulting Pareto frontier
 - `compression`: tuning knob with sentinel endpoints: `0` prefers flat
   encoding, `1..9` use the size/speed heuristic, and `10` minimizes raw
   table bytes (default `1`)
