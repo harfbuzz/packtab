@@ -102,7 +102,7 @@ __all__ = [
     "binaryBitsFor",
 ]
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
 
 
 class AutoMapping(collections.defaultdict):
