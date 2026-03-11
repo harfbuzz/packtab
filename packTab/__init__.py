@@ -353,6 +353,35 @@ class LanguageRust(Language):
     def print_preamble(self, *, print=print):
         pass
 
+    def _print_allow(self, lints, *, print=print):
+        print("#[allow(%s)]" % ", ".join(lints))
+
+    def _array_lints(self, *, private):
+        lints = [
+            "dead_code",
+            "non_upper_case_globals",
+            "clippy::allow_attributes_without_reason",
+        ]
+        if not private:
+            lints.append("missing_docs")
+        return lints
+
+    def _function_lints(self, *, private):
+        lints = [
+            "dead_code",
+            "unused_parens",
+            "trivial_numeric_casts",
+            "clippy::allow_attributes_without_reason",
+            "clippy::unseparated_literal_suffix",
+            "clippy::double_parens",
+            "clippy::unnecessary_cast",
+        ]
+        if self.unsafe_array_access:
+            lints.extend(["unsafe_code", "unused_unsafe"])
+        if not private:
+            lints.append("missing_docs")
+        return lints
+
     def cast(self, typ, expr):
         return "(%s) as %s" % (expr, typ)
 
@@ -379,11 +408,12 @@ class LanguageRust(Language):
         args = ", ".join("%s: %s" % (n, t) for t, n in args)
         return "%sfn %s (%s) -> %s" % (linkage, name, args, retType)
 
+    def print_array(self, name, array, *, print=print, private=True):
+        self._print_allow(self._array_lints(private=private), print=print)
+        super().print_array(name, array, print=print, private=private)
+
     def print_function(self, name, function, *, print=print):
-        if self.unsafe_array_access:
-            print("#[allow(dead_code, unused_parens, unused_unsafe)]")
-        else:
-            print("#[allow(dead_code, unused_parens)]")
+        self._print_allow(self._function_lints(private=function.private), print=print)
         # Add #[inline] attribute for better optimization hints
         if function.inline_always:
             print("#[inline(always)]")

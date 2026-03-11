@@ -658,8 +658,7 @@ def _compile_and_run_rust(rs_code, data, default):
         checks.append("    assert_eq!(data_get(%d) as i64, %di64);" % (i, default))
 
     full = (
-        "#[allow(dead_code, unused_parens, overflowing_literals)]\n\n"
-        + rs_code
+        rs_code
         + "\nfn main() {\n"
         + "\n".join(checks)
         + '\n    println!("PASS");\n}\n'
