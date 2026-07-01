@@ -1631,7 +1631,7 @@ class OuterLayer(Layer):
 
 def pack_table(
     data: Union[List[Union[int, str]], Dict[int, Union[int, str]]],
-    default: Optional[Union[int, str]] = 0,
+    default: Any = 0,
     compression: Optional[float] = 1,
     mapping: Optional[Dict[Any, Any]] = None,
 ) -> Union["OuterSolution", List["OuterSolution"]]:
@@ -1641,10 +1641,13 @@ def pack_table(
         data: Either a dictionary mapping integer keys to values, or an
             iterable containing values for keys starting at zero. Values must
             all be integers, or all strings.
-        default: Value to be used for keys not specified in data. If None,
-            tries both boundary values and keeps the combined Pareto frontier.
-            Inferred defaults are only supported for list input. Defaults
-            to zero.
+        default: Value to be used for keys not specified in data (and returned
+            for out-of-range lookups). May be any value, including ``None``,
+            which is treated as a literal value (e.g. mapped to an integer via
+            ``mapping``). Pass the sentinel ``NotImplemented`` to instead infer
+            the default from the boundary values, trying both and keeping the
+            combined Pareto frontier; inferred defaults are only supported for
+            list input. Defaults to zero.
         compression: Tunes the size-vs-speed tradeoff. Higher values prefer
             smaller tables. If None, returns all Pareto-optimal solutions.
             Defaults to 1.
@@ -1705,8 +1708,10 @@ def pack_table(
 
     # Set up data as a list.
     if isinstance(data, dict):
-        if default is None:
-            raise ValueError("default=None is only supported for list input")
+        if default is NotImplemented:
+            raise ValueError(
+                "inferred default (NotImplemented) is only supported for list input"
+            )
         if not all(isinstance(k, int) for k in data.keys()):
             raise TypeError("dict keys must be integers")
         minK = min(data.keys())
@@ -1727,7 +1732,11 @@ def pack_table(
         raise TypeError("data values must be all integers or all non-integers")
     if not isinstance(data[0], int) and mapping is not None:
         data = [mapping[v] for v in data]
-    if not isinstance(default, int) and mapping is not None:
+    if (
+        default is not NotImplemented
+        and not isinstance(default, int)
+        and mapping is not None
+    ):
         default = mapping[default]
 
     def build_solutions_for_default(default_value):
@@ -1753,7 +1762,7 @@ def pack_table(
 
         return solutions
 
-    if default is None:
+    if default is NotImplemented:
         defaults = [data[0]]
         if data[-1] != data[0]:
             defaults.append(data[-1])
