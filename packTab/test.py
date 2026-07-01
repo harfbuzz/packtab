@@ -1520,10 +1520,11 @@ class TestPaletteEncoding:
 
 
 class TestInferredDefault:
-    def test_none_default_uses_boundary_candidates(self):
+    # Inference is requested with the NotImplemented sentinel; None is a literal.
+    def test_infer_uses_boundary_candidates(self):
         data = [9, 1, 2, 3, 0, 0, 0]
 
-        inferred = pack_table(data, default=None, compression=None)
+        inferred = pack_table(data, default=NotImplemented, compression=None)
         explicit = pack_table(data, default=0, compression=None)
 
         assert any(
@@ -1532,10 +1533,10 @@ class TestInferredDefault:
             for b in explicit
         )
 
-    def test_none_default_considers_both_boundary_values(self):
+    def test_infer_considers_both_boundary_values(self):
         data = [7, 0, 0, 0, 1]
 
-        inferred = pack_table(data, default=None, compression=None)
+        inferred = pack_table(data, default=NotImplemented, compression=None)
         left = pack_table(data, default=7, compression=None)
         right = pack_table(data, default=1, compression=None)
 
@@ -1546,6 +1547,36 @@ class TestInferredDefault:
 
         assert inferred_costs <= candidate_costs
         assert inferred_costs
+
+    def test_infer_not_supported_for_dict(self):
+        with pytest.raises(ValueError):
+            pack_table({0: 1, 5: 2}, default=NotImplemented)
+
+    def test_none_is_a_literal_value_not_inference(self):
+        # None must be usable as a real value (mapped to an int), the way
+        # HarfBuzz's decomposition table uses it: dict + default=None +
+        # a mapping that sends None -> 0.
+        mapping = {None: 0, "a": 1, "b": 2}
+        data = {0: "a", 3: "b"}  # gaps (1, 2) fall back to default None -> 0
+        sol = pack_table(data, default=None, mapping=mapping, compression=1)
+        code = Code("data")
+        sol.genCode(code, "get", language="c", private=False)
+        buf = io.StringIO()
+        code.print_code(file=buf, language="c")
+        gen = buf.getvalue()
+        # Out-of-range / gap default is 0 (mapped from None), not a crash.
+        assert "data_get" in gen
+        _compile_and_run(gen, [1, 0, 0, 2], 0, "c")
+
+    def test_none_literal_list_with_mapping(self):
+        mapping = {None: 0, "x": 5}
+        data = ["x", None, "x"]
+        sol = pack_table(data, default=None, mapping=mapping, compression=1)
+        code = Code("data")
+        sol.genCode(code, "get", language="c", private=False)
+        buf = io.StringIO()
+        code.print_code(file=buf, language="c")
+        _compile_and_run(buf.getvalue(), [5, 0, 5], 0, "c")
 
 
 class TestCodegenSoundnessRegression:
