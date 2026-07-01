@@ -450,6 +450,29 @@ class TestCode:
         code.print_code(file=buf, language="c", private=False)
         assert "extern const" in buf.getvalue()
 
+    def test_print_h_public_prototype(self):
+        code = Code("data")
+        pack_table(list(range(300)), default=0, compression=1).genCode(
+            code, "get", language="c", private=False
+        )
+        buf = io.StringIO()
+        code.print_h(file=buf)
+        out = buf.getvalue()
+        assert "extern uint16_t data_get (unsigned u);" in out
+        # Private sub-byte helpers must not appear in the header.
+        assert "data_b" not in out
+
+    def test_print_h_skips_private_helpers(self):
+        code = Code("t")
+        code.addFunction("uint8_t", "helper", (("unsigned", "u"),), "u", private=True)
+        code.addFunction(
+            "uint8_t", "pub", (("unsigned", "u"),), "u", private=False
+        )
+        buf = io.StringIO()
+        code.print_h(file=buf)
+        out = buf.getvalue()
+        assert "t_pub" in out and "t_helper" not in out
+
 
 # ── Core algorithm ─────────────────────────────────────────────────
 
