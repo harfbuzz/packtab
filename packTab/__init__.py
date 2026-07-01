@@ -1093,7 +1093,11 @@ class InnerLayer(Layer):
     """
 
     def __init__(self, data):
-        Layer.__init__(self, data)
+        # Own a private copy: split() appends a padding element to self.data, and
+        # the caller's list may be aliased (OuterLayer passes its own data through
+        # unchanged for non-integer values).  Mutating it would extend the bounds
+        # check so out-of-range indices return the padding instead of the default.
+        Layer.__init__(self, list(data))
 
         self.maxV = max(data)
         self.minV = min(data)

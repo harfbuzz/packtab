@@ -1582,6 +1582,47 @@ class TestCodegenSoundnessRegression:
             picked = pack_table(data, default=0, compression=10)
             assert picked.cost == true_min, (data[:8], picked.cost, true_min)
 
+    # ── F5: odd-length string data must not leak the split() padding ──
+    def test_odd_length_string_data_out_of_range_default(self):
+        data = ["A", "B", "C"]  # odd length -> split() pads to 4
+        sol = pack_table(data, default="DEF", compression=1)
+        lang = languageClasses["c"]()
+        code = Code("data")
+        sol.genCode(code, "get", language=lang, private=False)
+        buf = io.StringIO()
+        code.print_code(file=buf, language=lang)
+        gen = buf.getvalue()
+        # Define the string identifiers so the generated C compiles, and assert the
+        # out-of-range index returns DEF (not the 'A' padding).
+        checks = "\n".join(
+            "  assert(data_get(%d)==%s);" % (i, v) for i, v in enumerate(data)
+        )
+        checks += "\n  assert(data_get(3)==DEF);\n  assert(data_get(9)==DEF);"
+        src = (
+            "#include <assert.h>\n#include <stdint.h>\n"
+            "#define A 1\n#define B 2\n#define C 3\n#define DEF 9\n"
+            + gen
+            + "\nint main(){\n" + checks + "\n  return 0;\n}\n"
+        )
+        with tempfile.NamedTemporaryFile(suffix=".c", mode="w", delete=False) as f:
+            f.write(src)
+            path = f.name
+        out = path[:-2]
+        try:
+            subprocess.check_call(
+                ["cc", "-o", out, path, "-std=c99", "-w"], stderr=subprocess.PIPE
+            )
+            subprocess.check_call([out])
+        finally:
+            os.unlink(path)
+            if os.path.exists(out):
+                os.unlink(out)
+
+    def test_inner_layer_does_not_mutate_caller_list(self):
+        original = ["A", "B", "C"]
+        layer = OuterLayer(list(original), "DEF")
+        assert len(layer.data) == 3
+
     # ── F4: palette lookup must honor its shared-array start offset ──
     def test_two_palettes_in_one_code_roundtrip(self, language):
         def palette_solution(d):
