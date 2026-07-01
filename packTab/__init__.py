@@ -1155,18 +1155,22 @@ class InnerLayer(Layer):
 
         When padding is needed, the padded element is never accessed
         (guaranteed unreachable), so we choose a padding value that
-        creates the most common pair, maximizing compression.
+        creates the most common pair, maximizing compression.  Padding is
+        applied to a local copy only; ``self.data`` is left untouched so the
+        flat (unsplit) solution emits the exact original array with no
+        unreachable trailing byte.
         """
-        if len(self.data) & 1:
+        data = self.data
+        if len(data) & 1:
             # Smart padding: choose value that creates most common pair.
             # The padded position is never accessed, so this is safe.
-            last_val = self.data[-1]
+            last_val = data[-1]
             padding = self._choose_optimal_padding(last_val)
-            self.data.append(padding)
+            data = data + [padding]
 
         # Collect pairs with frequencies and first occurrence positions
         from collections import Counter
-        pairs = [(self.data[i], self.data[i + 1]) for i in range(0, len(self.data), 2)]
+        pairs = [(data[i], data[i + 1]) for i in range(0, len(data), 2)]
         pair_freq = Counter(pairs)
         first_occurrence = {}
         for i, pair in enumerate(pairs):
@@ -1184,7 +1188,7 @@ class InnerLayer(Layer):
             mapping[pair]  # Assigns next sequential ID
 
         # Apply mapping to create child layer data
-        data2 = _combine2(self.data, lambda a, b: mapping[(a, b)])
+        data2 = _combine2(data, lambda a, b: mapping[(a, b)])
 
         self.next = InnerLayer(data2)
 

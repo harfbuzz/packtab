@@ -15,6 +15,7 @@
 from . import *
 import argparse
 import sys
+from math import log2
 
 
 def main(args=None):
@@ -205,9 +206,14 @@ def main(args=None):
 
         for i, sol in enumerate(solutions):
             ratio = original_bytes / sol.cost if sol.cost > 0 else float("inf")
-            score = sol.nLookups + compression_values[0] * (sol.fullCost.bit_length() - 1)
+            # Use the same score pick_solution uses for 1..9 (exact log2, not
+            # floor via bit_length), so the highlighted "Best solution" matches
+            # the minimum-score row.
+            score = sol.nLookups + compression_values[0] * (
+                log2(sol.fullCost) if sol.fullCost > 0 else 0
+            )
             print(
-                f"{i+1:<3} {sol.nLookups:<8} {sol.nExtraOps:<9} {sol.cost:<6} {sol.fullCost:<8} {ratio:>6.2f}x {score:>7.1f}"
+                f"{i+1:<3} {sol.nLookups:<8} {sol.nExtraOps:<9} {sol.cost:<6} {sol.fullCost:<8} {ratio:>6.2f}x {score:>8.2f}"
             )
 
         print()
