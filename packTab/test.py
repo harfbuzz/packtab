@@ -1005,6 +1005,66 @@ class TestCLI:
         assert r.returncode == 0
         assert "packTab" in r.stdout
 
+    def test_analyze_best_matches_min_score(self):
+        # Regression: the displayed Score used floor(log2) while pick_solution
+        # used exact log2, so the highlighted "Best solution" could disagree
+        # with the minimum-score row.  They must now agree for 1..9.
+        import random
+
+        rng = random.Random(555)
+        n = rng.randint(8, 900)
+        hi = rng.choice([3, 7, 15, 31, 63, 127, 255, 1023, 4095])
+        period = rng.choice([2, 3, 4, 5, 6, 8, 12, 16, 24, 32, 48, 64])
+        base = [rng.randint(0, hi) for _ in range(period)]
+        data = [
+            base[i % period] if rng.random() < rng.choice([0.7, 0.85, 0.95])
+            else rng.randint(0, hi)
+            for i in range(n)
+        ]
+        r = self._run("--analyze", "--compression", "6", *[str(v) for v in data])
+        assert r.returncode == 0
+
+        rows, best_idx = [], None
+        for line in r.stdout.splitlines():
+            parts = line.split()
+            # Solution rows look like: "<idx> <lookups> <extra> <bytes>
+            # <fullcost> <ratio>x <score>"; the ratio column ends in 'x'.
+            if len(parts) == 7 and parts[0].isdigit() and parts[5].endswith("x"):
+                rows.append((int(parts[0]), float(parts[6])))
+            elif line.startswith("Best solution"):
+                best_idx = int(line.rsplit("#", 1)[1])
+        assert rows and best_idx is not None
+        min_idx = min(rows, key=lambda t: t[1])[0]
+        assert best_idx == min_idx
+
+
+class TestFlatDeadByte:
+    """Odd-length flat tables must not emit the split() padding byte."""
+
+    def test_flat_odd_length_has_no_padding_byte(self):
+        data = [255, 1, 254, 2, 253, 3, 252, 4, 251]  # odd; flat is smallest
+        sol = pack_table(data, default=0, compression=10)
+        assert sol.nLookups == 1  # flat
+        code = Code("data")
+        sol.genCode(code, "get", language="c", private=False)
+        arrays = list(code.arrays.values())
+        assert arrays, "expected a real array, not an inline constant"
+        assert len(arrays[0].values) == len(data)  # no trailing dead byte
+
+    def test_inner_split_does_not_mutate_data(self):
+        layer = InnerLayer([1, 2, 3, 4, 5])  # odd length
+        assert len(layer.data) == 5  # split() padded a copy, not self.data
+
+    def test_flat_odd_length_roundtrips(self, language):
+        data = [255, 1, 254, 2, 253, 3, 252, 4, 251]
+        sol = pack_table(data, default=0, compression=10)
+        lang = languageClasses[language]()
+        code = Code("data")
+        sol.genCode(code, "get", language=lang, private=False)
+        buf = io.StringIO()
+        code.print_code(file=buf, language=lang)
+        _compile_and_run(buf.getvalue(), data, 0, language)
+
 
 class TestEdgeCases:
     """Test edge cases and boundary conditions."""
