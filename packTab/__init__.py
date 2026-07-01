@@ -656,7 +656,13 @@ class Code:
     def print_c(self, file=sys.stdout, indent=0):
         self.print_code(file=file, indent=indent, language="c")
 
-    def print_h(self, file=sys.stdout, linkage="", indent=0):
+    def print_h(self, file=sys.stdout, linkage="extern", indent=0):
+        """Emit C prototypes for the public (non-private) functions.
+
+        A companion to ``print_c`` for generating a header.  Private helpers
+        (e.g. sub-byte accessors) are ``static`` and belong with the
+        definitions, so they are skipped here.
+        """
         if linkage:
             linkage += " "
         if isinstance(indent, int):
@@ -665,9 +671,10 @@ class Code:
         println = partial(printn, indent)
 
         for name, function in self.functions.items():
-            link = (linkage if function.linkage is None else function.linkage) + " "
+            if function.private:
+                continue
             args = ", ".join(" ".join(p) for p in function.args)
-            println("%s%s %s (%s);" % (link, function.retType, name, args))
+            println("%s%s %s (%s);" % (linkage, function.retType, name, args))
 
 
 # Cost model constants.  These tune the tradeoff between table size
