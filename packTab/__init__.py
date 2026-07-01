@@ -875,7 +875,12 @@ class InnerSolution(Solution):
         # inline it as a constant instead of emitting an array.
         # Non-integer data (string identifiers) and negative values cannot
         # be inlined (negative values would produce invalid unsigned literals).
-        can_inline = len(data) * 8 <= 64 and all(
+        # ``data`` holds packed bytes when unitBits < 8 (see _combine), but holds
+        # unitBits-wide elements when unitBits >= 8.  Inlining packs each element at
+        # ``elem_bits`` stride and must match the extraction stride below, so use the
+        # element width — not a hardcoded 8 — for both the fit check and the packing.
+        elem_bits = unitBits if unitBits >= 8 else 8
+        can_inline = len(data) * elem_bits <= 64 and all(
             isinstance(v, int) and v >= 0 for v in data
         )
 
@@ -908,8 +913,8 @@ class InnerSolution(Solution):
             #   (CONSTANT >> (index << log2(unitBits))) & ((1 << unitBits) - 1)
             packed = 0
             for i, b in enumerate(data):
-                packed |= b << (i * 8)
-            const_typ = language.type_for(0, (1 << (len(data) * 8)) - 1)
+                packed |= b << (i * elem_bits)
+            const_typ = language.type_for(0, (1 << (len(data) * elem_bits)) - 1)
             lit = language.uint_literal(packed, const_typ)
             elementMask = (1 << unitBits) - 1
             shift2 = int(round(log2(unitBits))) if unitBits > 1 else 0
@@ -1041,14 +1046,32 @@ def _first_non_default_index(data, default):
 
 
 def _prune_pareto_solutions(solutions):
-    """Remove solutions dominated on (nLookups, fullCost)."""
-    solutions = sorted(solutions, key=lambda s: (s.nLookups, s.fullCost))
+    """Keep the (nLookups, fullCost) frontier, PLUS the (nLookups, cost) frontier.
+
+    The size/speed heuristic (compression 1..9) navigates the fullCost frontier and
+    is unaffected: the extra cost-frontier solutions are always fullCost-dominated, so
+    the monotone score ``nLookups + c*log2(fullCost)`` can never prefer them, and on an
+    exact score tie the fullCost-frontier incumbent is ordered first.  Retaining the
+    cost frontier lets the byte-minimizing (compression>=10) and flat (compression<=0)
+    selectors reach the true optimum, which pruning on fullCost alone would discard.
+    """
     kept = []
-    best_cost = float("inf")
-    for s in solutions:
-        if s.fullCost < best_cost:
-            kept.append(s)
-            best_cost = s.fullCost
+    seen = set()
+
+    def add_frontier(key):
+        best = float("inf")
+        for s in sorted(solutions, key=lambda s: (s.nLookups, key(s))):
+            k = key(s)
+            if k < best:
+                best = k
+                if id(s) not in seen:
+                    seen.add(id(s))
+                    kept.append(s)
+
+    add_frontier(lambda s: s.fullCost)  # incumbents first: 1..9 frontier, unchanged
+    add_frontier(lambda s: s.cost)      # byte-optimal solutions for compression>=10
+    # Stable sort keeps fullCost incumbents ahead of any cost-only tie.
+    kept.sort(key=lambda s: (s.nLookups, s.fullCost))
     return kept
 
 
@@ -1221,7 +1244,15 @@ class OuterSolution(Solution):
         if isinstance(language, str):
             language = languages[language]
 
-        typ = language.type_for(self.layer.minV, self.layer.maxV)
+        # The return type must also hold ``default`` — it is emitted in the
+        # out-of-range branch and returned for culled default-prefix indices, so a
+        # negative or oversized default would otherwise wrap (C) or fail to compile
+        # (Rust) even though the stored data fits a narrower type.
+        lo, hi = self.layer.minV, self.layer.maxV
+        d = self.layer.default
+        if isinstance(lo, int) and isinstance(d, int):
+            lo, hi = min(lo, d), max(hi, d)
+        typ = language.type_for(lo, hi)
         retType = fastType(typ)
         lookup_var = var
         if self.layer.base:
@@ -1297,8 +1328,13 @@ class PaletteOuterSolution(Solution):
         if isinstance(language, str):
             language = languages[language]
 
-        # Determine return type based on original value range
-        typ = language.type_for(self.layer.minV, self.layer.maxV)
+        # Determine return type based on original value range, widened to hold
+        # ``default`` (returned out-of-range / for culled default-prefix indices).
+        lo, hi = self.layer.minV, self.layer.maxV
+        d = self.layer.default
+        if isinstance(lo, int) and isinstance(d, int):
+            lo, hi = min(lo, d), max(hi, d)
+        typ = language.type_for(lo, hi)
         retType = fastType(typ)
 
         # Generate palette array containing unique values
@@ -1522,6 +1558,11 @@ class OuterLayer(Layer):
         if isinstance(self.minV, int) and isinstance(self.maxV, int):
             palette_solutions = self._try_palette_encoding(data, extraCost)
             self.solutions.extend(palette_solutions)
+
+        # Prune the combined (inner + palette) set to the union frontier, dropping
+        # solutions that are redundant — dominated on both fullCost and cost — such
+        # as an inner split beaten outright by a palette solution.
+        self.solutions = _prune_pareto_solutions(self.solutions)
 
     def _try_palette_encoding(self, data, extraCost):
         """Try palette encoding: store indices + unique values table.

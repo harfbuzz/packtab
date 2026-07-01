@@ -1337,17 +1337,22 @@ class TestPaletteEncoding:
         assert palette_sol.cost < 64  # Better than direct (64 bytes)
 
     def test_palette_in_pareto_frontier(self):
-        """Palette solution should be on Pareto frontier."""
+        """Every returned solution is minimal on the fullCost or the cost axis.
+
+        The frontier is the union of the (nLookups, fullCost) frontier (navigated by
+        compression 1..9) and the (nLookups, cost) frontier (needed for compression
+        >=10 to reach the true minimum bytes).  So a solution may be fullCost-dominated
+        yet still belong, provided it is cost-minimal for its lookup count; what must
+        never happen is a fully redundant solution — dominated on both axes.
+        """
         data = [1, 2, 3, 2, 3, 2, 1, 0, 2, 1, 2, 2, 3, 3, 1, 11110124]
         solutions = pack_table(data, default=0, compression=None)
 
-        # All returned solutions should be non-dominated
-        for a in solutions:
-            for b in solutions:
-                if a is b:
-                    continue
-                # a should not dominate b (otherwise b wouldn't be in frontier)
-                assert not (a.nLookups <= b.nLookups and a.fullCost <= b.fullCost)
+        for s in solutions:
+            peers = [t for t in solutions if t.nLookups <= s.nLookups]
+            on_fullcost = s.fullCost <= min(t.fullCost for t in peers)
+            on_cost = s.cost <= min(t.cost for t in peers)
+            assert on_fullcost or on_cost, (s.nLookups, s.fullCost, s.cost)
 
     def test_palette_selected_large_dataset(self):
         """Palette should be selected for large dataset with outliers."""
@@ -1518,3 +1523,73 @@ class TestInferredDefault:
 
         assert inferred_costs <= candidate_costs
         assert inferred_costs
+
+
+class TestCodegenSoundnessRegression:
+    """Round-trip regressions for codegen soundness bugs found by fuzzing."""
+
+    # ── F2: inline-constant path with >= 16-bit values ──
+    # A wide value packed into the inline path used to be corrupted because the
+    # packing assumed 8-bit elements.  This picks the inline solution at the
+    # default compression and must round-trip.
+    def test_inline_16bit_value_roundtrips(self, language):
+        data = [0] * 36 + [255] + [0] * 55 + [65000, 0, 0, 255] + [0] * 8
+        code = _generate(data, language=language)
+        _compile_and_run(code, data, 0, language)
+
+    def test_inline_various_wide_values_roundtrip(self, language):
+        for data in (
+            [0, 65000, 0, 300],
+            [0, 0, 70000, 0],  # 32-bit
+            [5, 5, 5, 4000, 5, 5, 5, 5],
+        ):
+            code = _generate(data, language=language)
+            _compile_and_run(code, data, 0, language)
+
+    # ── F3: return type must hold `default` ──
+    def test_negative_default_roundtrips(self, language):
+        data = [0, 1, 2, 3]
+        code = _generate(data, default=-1, language=language)
+        _compile_and_run(code, data, -1, language)
+
+    def test_large_default_roundtrips(self, language):
+        data = [0, 1, 2, 3]
+        code = _generate(data, default=1000, language=language)
+        _compile_and_run(code, data, 1000, language)
+
+    def test_default_outside_range_constant_data(self, language):
+        data = [0] * 8
+        code = _generate(data, default=-5, language=language)
+        _compile_and_run(code, data, -5, language)
+
+    def test_negative_default_culls_prefix(self, language):
+        # Inferred default picks a boundary value that base-rebasing then culls;
+        # the culled index must still return the (correctly typed) default.
+        data = [-2, 1]
+        code = _generate(data, default=-2, language=language)
+        _compile_and_run(code, data, -2, language)
+
+    # ── F1: compression>=10 must reach the true minimum-byte solution ──
+    def test_compression_10_is_global_min_bytes(self):
+        cases = [
+            [0] * 8 + [9999] + [0] * 30 + [5] + [0] * 60 + [1] + [0] * 40,
+            [0] * 200 + [7] + [0] * 55,
+            [i % 4 for i in range(400)],
+        ]
+        for data in cases:
+            frontier = pack_table(data, default=0, compression=None)
+            true_min = min(s.cost for s in frontier)
+            picked = pack_table(data, default=0, compression=10)
+            assert picked.cost == true_min, (data[:8], picked.cost, true_min)
+
+    def test_compression_1to9_picks_unchanged_by_frontier_enrichment(self):
+        # The cost-frontier solutions re-admitted for compression>=10 are always
+        # fullCost-dominated, so they must never change a 1..9 pick.
+        data = [0] * 64 + [1, 2, 3, 0, 0, 5] + [0] * 40 + [255] + [0] * 20
+        frontier = pack_table(data, default=0, compression=None)
+        for c in range(1, 10):
+            picked = pick_solution(list(frontier), c)
+            best = min(
+                frontier, key=lambda s: s.nLookups + c * __import__("math").log2(s.fullCost)
+            )
+            assert (picked.cost, picked.nLookups) == (best.cost, best.nLookups)
