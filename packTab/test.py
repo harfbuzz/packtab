@@ -1582,6 +1582,59 @@ class TestCodegenSoundnessRegression:
             picked = pack_table(data, default=0, compression=10)
             assert picked.cost == true_min, (data[:8], picked.cost, true_min)
 
+    # ── F4: palette lookup must honor its shared-array start offset ──
+    def test_two_palettes_in_one_code_roundtrip(self, language):
+        def palette_solution(d):
+            return [
+                s for s in pack_table(d, 0, compression=None)
+                if isinstance(getattr(s, "palette", None), list)
+            ][0]
+
+        data1 = ([10, 20, 30, 20] * 12) + [999999]
+        data2 = ([40, 50, 60, 70, 50] * 10) + [888888]
+        lang = languageClasses[language]()
+        code = Code("t")
+        palette_solution(data1).genCode(code, "g1", language=lang, private=False)
+        # Second palette accumulates into the SAME Code / shared "palette" array.
+        palette_solution(data2).genCode(code, "g2", language=lang, private=False)
+        buf = io.StringIO()
+        code.print_code(file=buf, language=lang)
+        gen = buf.getvalue()
+
+        if language == "c":
+            checks = "\n".join(
+                "  assert((long long)t_g2(%d)==(%dLL));" % (i, v)
+                for i, v in enumerate(data2)
+            )
+            src = (
+                "#include <assert.h>\n#include <stdint.h>\n" + gen
+                + "\nint main(){\n" + checks + "\n  return 0;\n}\n"
+            )
+            suffix = ".c"
+        else:
+            checks = "\n".join(
+                "    assert_eq!(t_g2(%d) as i64, %di64);" % (i, v)
+                for i, v in enumerate(data2)
+            )
+            src = gen + "\nfn main(){\n" + checks + '\n    println!("ok");\n}\n'
+            suffix = ".rs"
+
+        with tempfile.NamedTemporaryFile(suffix=suffix, mode="w", delete=False) as f:
+            f.write(src)
+            path = f.name
+        out = path[: -len(suffix)]
+        if language == "c":
+            compile_cmd = ["cc", "-o", out, path, "-std=c99", "-w"]
+        else:
+            compile_cmd = ["rustc", "-A", "warnings", "-o", out, path]
+        try:
+            subprocess.check_call(compile_cmd, stderr=subprocess.PIPE)
+            subprocess.check_call([out])
+        finally:
+            os.unlink(path)
+            if os.path.exists(out):
+                os.unlink(out)
+
     def test_compression_1to9_picks_unchanged_by_frontier_enrichment(self):
         # The cost-frontier solutions re-admitted for compression>=10 are always
         # fullCost-dominated, so they must never change a 1..9 pick.

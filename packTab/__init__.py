@@ -1339,7 +1339,7 @@ class PaletteOuterSolution(Solution):
 
         # Generate palette array containing unique values
         palette_typ = language.type_for(min(self.palette), max(self.palette))
-        palette_name, _ = code.addArray(palette_typ, "palette", self.palette)
+        palette_name, palette_start = code.addArray(palette_typ, "palette", self.palette)
         lookup_var = var
         if self.layer.base:
             lookup_var = language.wrapping_sub(
@@ -1350,9 +1350,16 @@ class PaletteOuterSolution(Solution):
         # This returns an expression that evaluates to a palette index
         (_, index_expr) = self.next.genCode(code, None, lookup_var, language=language)
 
-        # Look up value in palette: palette[index]
-        # Cast index to usize for Rust array indexing
+        # Look up value in palette: palette[start + index]
+        # Cast index to usize for Rust array indexing.  The palette array may be
+        # shared across solutions in one Code, so honor the start offset returned by
+        # addArray (as the data-array path does), rather than indexing from zero.
         index_expr_usize = language.as_usize(index_expr)
+        if palette_start:
+            index_expr_usize = "%s+%s" % (
+                language.usize_literal(palette_start),
+                index_expr_usize,
+            )
         expr = language.array_index(palette_name, index_expr_usize)
         expr = language.cast(retType, expr)
 
